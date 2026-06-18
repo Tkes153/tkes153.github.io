@@ -132,23 +132,87 @@
     html += '<div id="blogListContent"><p style="text-align:center;padding:40px;color:var(--text-tertiary);">' + (t('loading') || '...') + '</p></div>';
     html += '</div>';
 
-    // Knowledge cards
+    // Knowledge cards (randomly refreshed)
     html += renderDreamKnowledge();
     return html;
   }
 
+  // Knowledge card pool - 12 cards from dream science
+  var knowledgePool = [
+    { icon: '🔄', key: 'kSleepCycle',    keyDesc: 'kSleepCycleDesc',    zh: '睡眠周期',     zhDesc: '每夜经历4-5个睡眠周期，每个约90分钟。NREM深睡修复身体，REM睡眠孕育梦境。',                               en: 'Sleep Cycles',    enDesc: '4-5 cycles per night, ~90 min each. NREM repairs the body, REM births dreams.' },
+    { icon: '🧠', key: 'kREM',           keyDesc: 'kREMDesc',           zh: 'REM 睡眠',     zhDesc: '快速眼动睡眠期间大脑高度活跃，身体肌肉却处于麻痹状态——防止你把梦"演"出来。',                       en: 'REM Sleep',       enDesc: 'Brain highly active while body is paralyzed — preventing you from acting out dreams.' },
+    { icon: '💾', key: 'kMemory',        keyDesc: 'kMemoryDesc',        zh: '记忆巩固',     zhDesc: '睡眠中大脑对白天经历进行整理归档，将短期记忆转化为长期记忆。熬夜复习不如睡一觉。',                 en: 'Memory Consolidation', enDesc: 'During sleep, the brain archives daily experiences, converting short-term to long-term memory.' },
+    { icon: '📝', key: 'kRecord',        keyDesc: 'kRecordDesc',        zh: '记录梦境',     zhDesc: '醒来5分钟内遗忘50%梦境。床头放纸笔，醒来立刻记下关键词和情绪，不要等想清楚了再写。',           en: 'Recording Dreams', enDesc: '50% of dreams forgotten within 5 minutes. Keep a notebook by your bed, jot down keywords immediately.' },
+    { icon: '🎭', key: 'kActivation',    keyDesc: 'kActivationDesc',    zh: '激活-合成模型', zhDesc: '梦境可能是大脑皮层对脑干随机信号的"叙事拼接"——大脑像即兴导演，用记忆碎片编织出自洽的故事。',       en: 'Activation-Synthesis', enDesc: 'Dreams may be the brains narrative stitching of random brainstem signals — like an improvisational director.' },
+    { icon: '🌅', key: 'kMorning',       keyDesc: 'kMorningDesc',       zh: '清晨多梦',     zhDesc: '越接近清晨，REM睡眠时间越长。闹钟响前被长长的梦唤醒——那不是偶然。',                                en: 'Morning Dreams',  enDesc: 'REM sleep lengthens toward dawn. Being woken from a long dream by your alarm is not a coincidence.' },
+    { icon: '😴', key: 'kNREM',          keyDesc: 'kNREMDesc',          zh: 'NREM 深睡',   zhDesc: '深度睡眠（N3期）是身体修复最强的阶段。生长激素分泌达高峰，组织修复、细胞再生都在此时进行。',          en: 'NREM Deep Sleep', enDesc: 'Deep sleep (N3) is when body repair peaks. Growth hormone surges, tissue repair and cell regeneration occur.' },
+    { icon: '🔬', key: 'kBrainstem',     keyDesc: 'kBrainstemDesc',     zh: '脑干的角色',   zhDesc: '脑干（特别是脑桥）在REM睡眠中发出信号激活大脑皮层，是梦境的"开关"。同时抑制运动神经元防止身体乱动。',     en: 'Brainstem Role',  enDesc: 'The brainstem triggers REM sleep, activating the cortex while paralyzing muscles to prevent acting out dreams.' },
+    { icon: '🎬', key: 'kPrefrontal',    keyDesc: 'kPrefrontalDesc',    zh: '前额叶"罢工"', zhDesc: '做梦时前额叶皮层活动降低，这是负责逻辑和自控的区域。所以梦中你可以飞、场景会突然切换——逻辑下线了。',  en: 'Prefrontal Offline', enDesc: 'The prefrontal cortex (logic, self-control) quiets during dreams — why you can fly and scenes shift absurdly.' },
+    { icon: '⚡', key: 'kNeurotrans',    keyDesc: 'kNeurotransDesc',    zh: '神经递质',     zhDesc: 'REM睡眠中去甲肾上腺素和血清素分泌停止，乙酰胆碱活跃。这套化学变化让梦境天马行空、不受约束。',           en: 'Neurotransmitters', enDesc: 'Norepinephrine and serotonin stop during REM while acetylcholine surges — unleashing unbounded dream creativity.' },
+    { icon: '👁️', key: 'kLucid',         keyDesc: 'kLucidDesc',         zh: '清醒梦',       zhDesc: '在梦中意识到"我在做梦"并可能控制梦境。前额叶部分恢复活跃，连接了意识和无意识的世界。',           en: 'Lucid Dreaming',  enDesc: 'Becoming aware you are dreaming and potentially controlling the dream. A bridge between consciousness and the unconscious.' },
+    { icon: '🛡️', key: 'kThreat',        keyDesc: 'kThreatDesc',        zh: '威胁模拟',     zhDesc: '噩梦可能是大脑的"安全演习"——在虚拟环境中预演危险场景，帮助我们在现实中更好地应对威胁。',                en: 'Threat Simulation', enDesc: 'Nightmares may be the brains safety drills — rehearsing dangerous scenarios in a virtual environment to prepare for real threats.' },
+  ];
+
   function renderDreamKnowledge() {
+    // Pick 4 random cards
+    var pool = knowledgePool.slice();
+    shuffle(pool);
+    var selected = pool.slice(0, 4);
+
     var html = '';
     html += '<div class="knowledge-section">';
+    html += '<div class="knowledge-header">';
     html += '<h2 class="section-title">' + (t('dreamKnowledge') || '💤 梦境科学小知识') + '</h2>';
-    html += '<div class="knowledge-cards">';
-    html += '<div class="knowledge-card"><div class="knowledge-icon">🔄</div><h4>' + (t('kSleepCycle') || '睡眠周期') + '</h4><p>' + (t('kSleepCycleDesc') || '每夜经历4-5个睡眠周期，每个约90分钟。NREM深睡修复身体，REM睡眠孕育梦境。') + '</p></div>';
-    html += '<div class="knowledge-card"><div class="knowledge-icon">🧠</div><h4>' + (t('kREM') || 'REM 睡眠') + '</h4><p>' + (t('kREMDesc') || '快速眼动睡眠期间大脑高度活跃，身体肌肉却处于麻痹状态——防止你把梦"演"出来。') + '</p></div>';
-    html += '<div class="knowledge-card"><div class="knowledge-icon">💾</div><h4>' + (t('kMemory') || '记忆巩固') + '</h4><p>' + (t('kMemoryDesc') || '睡眠中大脑对白天经历进行整理归档，将短期记忆转化为长期记忆。') + '</p></div>';
-    html += '<div class="knowledge-card"><div class="knowledge-icon">📝</div><h4>' + (t('kRecord') || '梦的记录') + '</h4><p>' + (t('kRecordDesc') || '醒来5分钟内遗忘50%梦境。床头放纸笔，醒来立刻记下关键词和情绪。') + '</p></div>';
+    html += '<button class="knowledge-refresh" id="btnRefreshKnowledge" title="' + (t('refreshKnowledge') || '换一批') + '">🔄</button>';
     html += '</div>';
-    html += '</div>';
+    html += '<div class="knowledge-cards" id="knowledgeCards">';
+    for (var i = 0; i < selected.length; i++) {
+      var card = selected[i];
+      html += '<div class="knowledge-card">';
+      html += '<div class="knowledge-icon">' + card.icon + '</div>';
+      html += '<h4>' + (t(card.key) || localized(card)) + '</h4>';
+      html += '<p>' + (t(card.keyDesc) || '') + '</p>';
+      html += '</div>';
+    }
+    html += '</div></div>';
     return html;
+  }
+
+  function refreshKnowledgeCards() {
+    var container = document.getElementById('knowledgeCards');
+    if (!container) return;
+
+    var pool = knowledgePool.slice();
+    shuffle(pool);
+    var selected = pool.slice(0, 4);
+
+    var html = '';
+    for (var i = 0; i < selected.length; i++) {
+      var card = selected[i];
+      html += '<div class="knowledge-card" style="animation: fadeInUp 0.3s ease forwards;">';
+      html += '<div class="knowledge-icon">' + card.icon + '</div>';
+      html += '<h4>' + (t(card.key) || card.zh || '') + '</h4>';
+      html += '<p>' + (t(card.keyDesc) || '') + '</p>';
+      html += '</div>';
+    }
+    container.innerHTML = html;
+  }
+
+  function bindKnowledgeRefresh() {
+    var btn = document.getElementById('btnRefreshKnowledge');
+    if (btn) {
+      btn.addEventListener('click', function () {
+        refreshKnowledgeCards();
+        // Button spin animation
+        this.style.transform = 'rotate(360deg)';
+        setTimeout(function (el) { el.style.transform = ''; }, 400, this);
+      });
+    }
+  }
+
+  function localizedCard(card) {
+    var lang = getLang();
+    return { zh: card.zh, en: card.en }[lang] || card.zh;
   }
 
   function loadBlogListContent(random) {
@@ -420,6 +484,7 @@
       }
     } else if (route.page === 'home') {
       loadBlogListContent(true);
+      bindKnowledgeRefresh();
     } else if (route.page === 'dream') {
       loadDreamContent(route.dream);
     } else if (route.page === 'post') {
