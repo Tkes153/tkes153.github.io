@@ -58,23 +58,28 @@ var Auth = (function () {
 
   /** Register a new user with email + password */
   function register(email, password, displayName) {
+    // Use username+password method with email as username
     return auth.signUp({
-      email: email,
+      username: email,
       password: password,
       name: displayName || email.split('@')[0],
     }).then(function () {
-      // Re-login to get the full user object
-      return auth.signIn({ username: email, password: password });
-    }).then(function () {
-      // Create user document in database
-      var uid = auth.currentUser ? auth.currentUser.uid : null;
-      return db.collection('users').add({
-        email: email,
-        displayName: displayName || email.split('@')[0],
-        role: 'user',
-        createdAt: db.serverDate(),
+      // signUp already logs user in; create Firestore user doc
+      return auth.getCurrentUser().then(function (user) {
+        if (!user) return;
+        return db.collection('users').add({
+          email: email,
+          displayName: displayName || email.split('@')[0],
+          role: 'user',
+          createdAt: db.serverDate(),
+        });
       });
     });
+  }
+
+  /** Login with email + password */
+  function login(email, password) {
+    return auth.signIn({ username: email, password: password });
   }
 
   /** Login with email + password */
