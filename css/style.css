@@ -1676,6 +1676,14 @@ img {
 .nav-nightmare:hover, .nav-nightmare.active { color: #22c522 !important; background: rgba(34,197,34,0.15) !important; }
 .nav-weird:hover, .nav-weird.active { color: #a78bfa !important; background: rgba(167,139,250,0.15) !important; }
 
+.nav-dream-icon {
+  width: 22px;
+  height: 22px;
+  vertical-align: middle;
+  margin-right: 4px;
+  object-fit: contain;
+}
+
 /* ========================================
    Dream Type Selector (Radio Buttons)
    ======================================== */
