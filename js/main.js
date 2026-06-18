@@ -98,60 +98,102 @@
   // Page Renderers
   // ==========================================
 
-  function renderBlogList(callback) {
+  function renderBlogList() {
     var html = '';
 
     html += '<h1 class="page-title">' + t('siteTitle') + '</h1>';
     html += '<p class="page-subtitle">' + t('blogSubtitle') + '</p>';
-    // Placeholder while loading
-    html += '<div id="blogListContent"><p style="text-align:center;padding:40px;color:var(--text-tertiary);">' + (t('loading') || 'Loading...') + '</p></div>';
 
-    // If callback provided, use it; otherwise resolve after DOM insert
-    if (callback) {
-      callback(html);
-    }
+    // Three-column layout
+    html += '<div class="dream-columns" id="dreamColumns">';
+    html += '<div class="dream-col" id="colSweet">';
+    html += '<h2 class="dream-col-title">' + (t('sweetDreams') || '🌙 美梦') + '</h2>';
+    html += '<div class="dream-col-list" id="listSweet"><p style="text-align:center;padding:20px;color:var(--text-tertiary);">' + (t('loading') || '...') + '</p></div>';
+    html += '</div>';
+    html += '<div class="dream-col" id="colNightmare">';
+    html += '<h2 class="dream-col-title">' + (t('nightmares') || '💀 噩梦') + '</h2>';
+    html += '<div class="dream-col-list" id="listNightmare"><p style="text-align:center;padding:20px;color:var(--text-tertiary);">' + (t('loading') || '...') + '</p></div>';
+    html += '</div>';
+    html += '<div class="dream-col" id="colWeird">';
+    html += '<h2 class="dream-col-title">' + (t('weirdDreams') || '👽 怪梦') + '</h2>';
+    html += '<div class="dream-col-list" id="listWeird"><p style="text-align:center;padding:20px;color:var(--text-tertiary);">' + (t('loading') || '...') + '</p></div>';
+    html += '</div>';
+    html += '</div>';
+
     return html;
   }
 
   function loadBlogListContent() {
-    var container = document.getElementById('blogListContent');
-    if (!container) return;
     getPosts().then(function (allPosts) {
-      var html = '';
-      if (allPosts.length === 0) {
-        html += '<div class="empty-state">';
-        html += '<div class="empty-state-icon">📝</div>';
-        html += '<div class="empty-state-title">' + t('noPosts') + '</div>';
-        html += '<p>' + t('noPostsDesc') + '</p>';
-        html += '</div>';
-      } else {
-        html += '<div class="post-list">';
-        for (var i = 0; i < allPosts.length; i++) {
-          var post = allPosts[i];
-          var title = localized(post.title);
-          var summary = localized(post.summary);
-          var date = formatDate(post.date);
-          var readingTime = estimateReadingTime(localized(post.content));
-          var category = localized(post.category);
-          var slug = post.slug;
+      var categories = {
+        sweet: ['美梦', 'Sweet Dreams', 'SweetDreams', 'sweet'],
+        nightmare: ['噩梦', 'Nightmares', 'Nightmare', 'nightmare'],
+        weird: ['怪梦', 'Weird Dreams', 'WeirdDreams', 'weird'],
+      };
 
-          html += '<article class="post-card" data-slug="' + slug + '">';
-          html += '<time class="post-card-date">' + date + ' · ' + category + '</time>';
-          html += '<h2 class="post-card-title">' + title + '</h2>';
-          html += '<p class="post-card-summary">' + summary + '</p>';
-          html += '<div class="post-card-meta">';
-          for (var j = 0; j < post.tags.length; j++) {
-            html += '<span class="post-card-tag">' + localized(post.tags[j]) + '</span>';
+      var buckets = { sweet: [], nightmare: [], weird: [] };
+
+      for (var i = 0; i < allPosts.length; i++) {
+        var post = allPosts[i];
+        var cat = localized(post.category);
+        var matched = false;
+        for (var key in categories) {
+          if (categories[key].indexOf(cat) !== -1) {
+            buckets[key].push(post);
+            matched = true;
+            break;
           }
-          html += '<span class="post-card-reading-time">' + t('readingTime', { n: readingTime }) + '</span>';
-          html += '</div>';
-          html += '</article>';
         }
-        html += '</div>';
+        // Default: put in nightmare (middle column)
+        if (!matched) {
+          buckets['nightmare'].push(post);
+        }
       }
-      container.innerHTML = html;
+
+      var colKeys = ['sweet', 'nightmare', 'weird'];
+      var listIds = ['listSweet', 'listNightmare', 'listWeird'];
+
+      for (var k = 0; k < colKeys.length; k++) {
+        var list = document.getElementById(listIds[k]);
+        if (!list) continue;
+        var postsInCol = buckets[colKeys[k]];
+        if (postsInCol.length === 0) {
+          list.innerHTML = '<p style="text-align:center;padding:20px;color:var(--text-tertiary);">' + (t('noPosts') || '暂无') + '</p>';
+        } else {
+          list.innerHTML = renderPostCards(postsInCol);
+        }
+      }
+
       attachPostCardListeners();
     });
+  }
+
+  function renderPostCards(postsList) {
+    var html = '';
+    for (var i = 0; i < postsList.length; i++) {
+      var post = postsList[i];
+      var title = localized(post.title);
+      var summary = localized(post.summary);
+      var date = formatDate(post.date);
+      var readingTime = estimateReadingTime(localized(post.content));
+      var slug = post.slug;
+
+      html += '<article class="post-card post-card-sm" data-slug="' + slug + '">';
+      html += '<time class="post-card-date">' + date + ' · ' + t('readingTime', { n: readingTime }) + '</time>';
+      html += '<h3 class="post-card-title">' + title + '</h3>';
+      html += '<p class="post-card-summary">' + summary + '</p>';
+      html += '</article>';
+    }
+    return html;
+  }
+
+  function renderBlogListOld() {
+    var html = '';
+
+    html += '<h1 class="page-title">' + t('siteTitle') + '</h1>';
+    html += '<p class="page-subtitle">' + t('blogSubtitle') + '</p>';
+    html += '<div id="blogListContent"><p style="text-align:center;padding:40px;color:var(--text-tertiary);">' + (t('loading') || 'Loading...') + '</p></div>';
+    return html;
   }
 
   function renderPostDetail(slug) {

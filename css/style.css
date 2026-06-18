@@ -1519,3 +1519,81 @@ img {
     flex-direction: column;
   }
 }
+
+/* ========================================
+   3-Column Dream Layout
+   ======================================== */
+
+.dream-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 24px;
+  margin-top: 32px;
+}
+
+.dream-col {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px 20px;
+  box-shadow: var(--card-shadow);
+  transition: all 0.3s ease;
+}
+
+.dream-col:hover {
+  box-shadow: var(--card-shadow-hover);
+}
+
+.dream-col-title {
+  font-family: 'Noto Serif SC', 'Georgia', serif;
+  font-size: 1.3rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--border);
+  letter-spacing: 1px;
+}
+
+#colSweet .dream-col-title { color: #f59e0b; }
+#colNightmare .dream-col-title { color: #ef4444; }
+#colWeird .dream-col-title { color: #8b5cf6; }
+
+[data-theme="dark"] #colSweet .dream-col-title { color: #fbbf24; }
+[data-theme="dark"] #colNightmare .dream-col-title { color: #f87171; }
+[data-theme="dark"] #colWeird .dream-col-title { color: #a78bfa; }
+
+.dream-col-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Smaller cards for 3-column layout */
+.post-card-sm {
+  padding: 14px 16px;
+  border-radius: 10px;
+}
+
+.post-card-sm .post-card-title {
+  font-size: 1rem;
+  -webkit-line-clamp: 2;
+}
+
+.post-card-sm .post-card-summary {
+  font-size: 0.82rem;
+  -webkit-line-clamp: 2;
+}
+
+.post-card-sm .post-card-date {
+  font-size: 0.76rem;
+  margin-bottom: 4px;
+}
+
+/* Responsive: stack columns on mobile */
+@media (max-width: 900px) {
+  .dream-columns {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
