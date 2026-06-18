@@ -21,7 +21,7 @@
   // ==========================================
 
   function getTheme() {
-    return localStorage.getItem('blog-theme') || 'light';
+    return localStorage.getItem('blog-theme') || 'dark';
   }
 
   function applyTheme(theme) {

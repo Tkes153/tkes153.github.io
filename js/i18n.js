@@ -5,10 +5,10 @@
 
 const i18n = {
   zh: {
-    siteTitle: '我的博客',
+    siteTitle: 'Nightmare',
     home: '首页',
     about: '关于',
-    blogSubtitle: '记录思考、技术与生活',
+    blogSubtitle: 'Exploring Your Dream',
     aboutTitle: '关于我',
     aboutName: '你好，我是博主',
     aboutBio: '欢迎来到我的个人博客！这里记录了我对技术、生活和学习的思考。我喜欢编程、写作、徒步和摄影。希望你能在这里找到有趣的内容。',
@@ -132,10 +132,10 @@ sendCode: '发送验证码',
   },
 
   en: {
-    siteTitle: 'My Blog',
+    siteTitle: 'Nightmare',
     home: 'Home',
     about: 'About',
-    blogSubtitle: 'Thoughts on tech, life & learning',
+    blogSubtitle: 'Exploring Your Dream',
     aboutTitle: 'About Me',
     aboutName: "Hi, I'm the Author",
     aboutBio: "Welcome to my personal blog! Here I share my thoughts on technology, life, and learning. I enjoy programming, writing, hiking, and photography. Hope you find something interesting here.",
