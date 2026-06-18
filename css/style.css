@@ -1720,3 +1720,40 @@ img {
 .dream-type-opt input[type="radio"] {
   display: none;
 }
+
+/* ========================================
+   Dream-Themed Post Cards
+   ======================================== */
+
+/* Sweet Dreams — candle flame card */
+[data-dream="sweet"] .post-card {
+  background: linear-gradient(135deg, #2a1805 0%, #1a1000 100%);
+  border-color: #5a3510;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
+}
+[data-dream="sweet"] .post-card:hover {
+  border-color: #f59e0b;
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.4);
+}
+
+/* Nightmares — cat eye green card */
+[data-dream="nightmare"] .post-card {
+  background: linear-gradient(135deg, #081a08 0%, #020f02 100%);
+  border-color: #1a4a1a;
+  box-shadow: 0 0 12px rgba(34, 197, 34, 0.2);
+}
+[data-dream="nightmare"] .post-card:hover {
+  border-color: #22c522;
+  box-shadow: 0 0 25px rgba(34, 197, 34, 0.4);
+}
+
+/* Weird Dreams — ethereal white card */
+[data-dream="weird"] .post-card {
+  background: linear-gradient(135deg, #1a1a2e 0%, #12121f 100%);
+  border-color: #3a2a5a;
+  box-shadow: 0 0 12px rgba(167, 139, 250, 0.2);
+}
+[data-dream="weird"] .post-card:hover {
+  border-color: #a78bfa;
+  box-shadow: 0 0 25px rgba(167, 139, 250, 0.4);
+}
