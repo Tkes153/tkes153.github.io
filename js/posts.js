@@ -101,9 +101,13 @@ posts.sort(function (a, b) {
  * Falls back to bundled posts if CloudBase is unavailable.
  */
 function getPosts() {
-  // Try CloudBase first
+  // Try CloudBase, with timeout fallback to bundled posts
   if (typeof db !== 'undefined') {
-    return db.collection('posts')
+    var timeout = new Promise(function (_, reject) {
+      setTimeout(function () { reject(new Error('timeout')); }, 5000);
+    });
+
+    var query = db.collection('posts')
       .where({ status: 'approved' })
       .get()
       .then(function (res) {
@@ -119,12 +123,10 @@ function getPosts() {
           }
           cloudPosts.push(doc);
         }
-        // Sort in JS instead of CloudBase (avoids index requirement)
         cloudPosts.sort(function (a, b) {
           return new Date(b.date || 0) - new Date(a.date || 0);
         });
 
-        // Merge: CloudBase posts + bundled posts (deduplicate by slug)
         var slugs = {};
         for (var j = 0; j < cloudPosts.length; j++) {
           slugs[cloudPosts[j].slug] = true;
@@ -139,13 +141,13 @@ function getPosts() {
           return new Date(b.date) - new Date(a.date);
         });
         return merged;
-      })
-      .catch(function (err) {
-        console.warn('CloudBase fetch failed, using bundled posts:', err);
-        return posts;
       });
+
+    return Promise.race([query, timeout]).catch(function (err) {
+      console.warn('CloudBase query skipped, using bundled posts:', err);
+      return posts;
+    });
   }
 
-  // Fallback: bundled posts only
   return Promise.resolve(posts);
 }
