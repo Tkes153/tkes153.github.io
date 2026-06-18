@@ -1,323 +1,330 @@
 /**
- * Admin Module
- * Handles authentication, post CRUD, and data export.
- * Posts are stored in localStorage under 'blog-custom-posts'.
- * Session is stored in sessionStorage under 'blog-admin-auth'.
+ * Admin Module v2 (Firebase)
+ * Handles admin authentication, post review, user management, and post editing.
+ * All data stored in Firestore.
+ *
+ * Dependencies: firebase-config.js (db, auth), i18n.js (t, localized), auth.js (Auth)
  */
 
 var Admin = (function () {
   'use strict';
 
-  // SHA-256 hash of the default password "admin123456"
-  // CHANGE THIS to your own hash after first login!
-  var PASSWORD_HASH = 'ac0e7d037817094e9e0b4441f9bae3209d67b02fa484917065f71b16109a1a78';
-
-  var STORAGE_KEY = 'blog-custom-posts';
-  var SESSION_KEY = 'blog-admin-auth';
-
   // ==========================================
-  // Crypto
-  // ==========================================
-
-  function sha256(message) {
-    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(message))
-      .then(function (hashBuffer) {
-        return Array.from(new Uint8Array(hashBuffer))
-          .map(function (b) { return b.toString(16).padStart(2, '0'); })
-          .join('');
-      });
-  }
-
-  // ==========================================
-  // Authentication
+  // Admin Auth Check
   // ==========================================
 
   function isLoggedIn() {
-    return sessionStorage.getItem(SESSION_KEY) === 'true';
+    return Auth.isLoggedIn() && Auth.isAdmin();
   }
 
-  function login(password) {
-    return sha256(password).then(function (hash) {
-      if (hash === PASSWORD_HASH) {
-        sessionStorage.setItem(SESSION_KEY, 'true');
-        return true;
-      }
+  function ensureAdmin() {
+    if (!isLoggedIn()) {
+      window.location.hash = '#/admin';
       return false;
-    });
+    }
+    return true;
   }
 
-  function logout() {
-    sessionStorage.removeItem(SESSION_KEY);
+  // ==========================================
+  // Firestore Helpers
+  // ==========================================
+
+  function postsRef() {
+    return db.collection('posts');
   }
 
-  function changePassword(oldPassword, newPassword) {
-    return sha256(oldPassword).then(function (oldHash) {
-      if (oldHash !== PASSWORD_HASH) {
-        return false;
-      }
-      return sha256(newPassword).then(function (newHash) {
-        PASSWORD_HASH = newHash;
-        // Note: PASSWORD_HASH is in-memory only. On page reload it resets.
-        // For now, we store it in localStorage so it persists.
-        localStorage.setItem('blog-admin-hash', newHash);
-        return true;
+  function usersRef() {
+    return db.collection('users');
+  }
+
+  function docToPost(doc) {
+    var data = doc.data();
+    data._id = doc.id;
+    if (data.createdAt && data.createdAt.toDate) {
+      data.date = data.createdAt.toDate().toISOString().split('T')[0];
+    }
+    return data;
+  }
+
+  // ==========================================
+  // Post Operations (Firestore)
+  // ==========================================
+
+  function getPendingPosts() {
+    return postsRef()
+      .where('status', '==', 'pending')
+      .orderBy('createdAt', 'desc')
+      .get()
+      .then(function (snap) {
+        var result = [];
+        snap.forEach(function (doc) { result.push(docToPost(doc)); });
+        return result;
       });
-    });
   }
 
-  // Load persisted password hash if set
-  (function () {
-    var saved = localStorage.getItem('blog-admin-hash');
-    if (saved) {
-      PASSWORD_HASH = saved;
-    }
-  })();
-
-  // ==========================================
-  // Post CRUD
-  // ==========================================
-
-  /** Get custom posts from localStorage */
-  function getCustomPosts() {
-    try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  /** Save custom posts to localStorage */
-  function saveCustomPosts(list) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  }
-
-  /** Get all posts: custom posts + bundled posts */
   function getAllPosts() {
-    var custom = getCustomPosts();
-    // Deduplicate by slug: custom posts override bundled ones
-    var slugs = {};
-    for (var i = 0; i < custom.length; i++) {
-      slugs[custom[i].slug] = true;
-    }
-    var merged = custom.slice();
-    for (var j = 0; j < posts.length; j++) {
-      if (!slugs[posts[j].slug]) {
-        merged.push(posts[j]);
-      }
-    }
-    // Sort by date descending
-    merged.sort(function (a, b) {
-      return new Date(b.date) - new Date(a.date);
+    return postsRef()
+      .orderBy('createdAt', 'desc')
+      .get()
+      .then(function (snap) {
+        var result = [];
+        snap.forEach(function (doc) { result.push(docToPost(doc)); });
+        return result;
+      });
+  }
+
+  function approvePost(postId, comment) {
+    return postsRef().doc(postId).update({
+      status: 'approved',
+      reviewComment: comment || '',
+      reviewedBy: Auth.getCurrentUser().uid,
+      reviewedAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
-    return merged;
   }
 
-  function findPost(slug) {
-    var all = getAllPosts();
-    for (var i = 0; i < all.length; i++) {
-      if (all[i].slug === slug) {
-        return all[i];
-      }
-    }
-    return null;
+  function rejectPost(postId, comment) {
+    return postsRef().doc(postId).update({
+      status: 'rejected',
+      reviewComment: comment || '',
+      reviewedBy: Auth.getCurrentUser().uid,
+      reviewedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
   }
 
-  function addPost(post) {
-    var custom = getCustomPosts();
-    // Ensure slug uniqueness
-    var existing = findPost(post.slug);
-    if (existing) {
-      // Overwrite
-      for (var i = 0; i < custom.length; i++) {
-        if (custom[i].slug === post.slug) {
-          custom[i] = post;
-          saveCustomPosts(custom);
-          return true;
-        }
-      }
-    }
-    custom.unshift(post);
-    saveCustomPosts(custom);
-    return true;
+  function updatePost(postId, data) {
+    return postsRef().doc(postId).update(data);
   }
 
-  function updatePost(slug, post) {
-    var custom = getCustomPosts();
-    for (var i = 0; i < custom.length; i++) {
-      if (custom[i].slug === slug) {
-        custom[i] = post;
-        saveCustomPosts(custom);
-        return true;
-      }
-    }
-    // Not in custom posts — add it
-    custom.unshift(post);
-    saveCustomPosts(custom);
-    return true;
-  }
-
-  function deletePost(slug) {
-    var custom = getCustomPosts();
-    for (var i = 0; i < custom.length; i++) {
-      if (custom[i].slug === slug) {
-        custom.splice(i, 1);
-        saveCustomPosts(custom);
-        return true;
-      }
-    }
-    // Mark bundled posts as deleted by adding to a "deleted" list
-    var deleted = getDeletedSlugs();
-    deleted.push(slug);
-    localStorage.setItem('blog-deleted-slugs', JSON.stringify(deleted));
-    return true;
-  }
-
-  function getDeletedSlugs() {
-    try {
-      return JSON.parse(localStorage.getItem('blog-deleted-slugs')) || [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  /** Generate slug from title (Chinese or English) */
-  function generateSlug(title) {
-    return title
-      .toLowerCase()
-      .replace(/[^a-z0-9一-鿿]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .replace(/[^\x00-\x7F]/g, '')  // remove non-ASCII for URL safety
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') || 'post-' + Date.now();
+  function deletePost(postId) {
+    return postsRef().doc(postId).delete();
   }
 
   // ==========================================
-  // Export
+  // User Operations
   // ==========================================
 
-  function exportPostsJS() {
-    var all = getAllPosts();
-    var deleted = getDeletedSlugs();
-    // Filter out deleted
-    all = all.filter(function (p) { return deleted.indexOf(p.slug) === -1; });
-    var json = JSON.stringify(all, null, 2);
-    var content = '/**\n' +
-      ' * Blog Posts Data\n' +
-      ' * Auto-generated from admin panel on ' + new Date().toISOString().split('T')[0] + '\n' +
-      ' */\n\n' +
-      'var posts = ' + json + ';\n\n' +
-      'posts.sort(function (a, b) {\n' +
-      '  return new Date(b.date) - new Date(a.date);\n' +
-      '});\n';
-    return content;
+  function getAllUsers() {
+    return usersRef()
+      .orderBy('createdAt', 'desc')
+      .get()
+      .then(function (snap) {
+        var result = [];
+        snap.forEach(function (doc) {
+          var u = doc.data();
+          u._id = doc.id;
+          result.push(u);
+        });
+        return result;
+      });
   }
 
-  function downloadPostsJS() {
-    var content = exportPostsJS();
-    var blob = new Blob([content], { type: 'application/javascript' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'posts.js';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  function updateUserRole(uid, newRole) {
+    return usersRef().doc(uid).update({ role: newRole });
   }
 
   // ==========================================
-  // Render: Login Page
+  // Render: Login Required
   // ==========================================
 
-  function renderLogin(errorMsg) {
+  function renderLoginRequired() {
     var html = '';
     html += '<div class="admin-login">';
     html += '<div class="admin-login-card">';
     html += '<div class="admin-login-icon">🔐</div>';
     html += '<h2 class="admin-login-title">' + t('adminLogin') + '</h2>';
-    if (errorMsg) {
-      html += '<p class="admin-error">' + errorMsg + '</p>';
-    }
-    html += '<form id="adminLoginForm" class="admin-login-form">';
-    html += '<input type="password" id="adminPassword" class="admin-input" placeholder="' + t('adminPassword') + '" autofocus>';
-    html += '<button type="submit" class="admin-btn admin-btn-primary">' + t('adminLoginBtn') + '</button>';
-    html += '</form>';
-    html += '<p class="admin-hint">' + t('adminHint') + '</p>';
-    html += '</div>';
-    html += '</div>';
+    html += '<p style="color:var(--text-secondary);margin-bottom:20px;">' + (t('adminLoginRequired') || '请使用管理员账号登录') + '</p>';
+    html += '<button class="admin-btn admin-btn-primary" id="adminGoLogin">' + (t('login') || '去登录') + '</button>';
+    html += '</div></div>';
     return html;
   }
 
   // ==========================================
-  // Render: Dashboard (Post List)
+  // Render: Dashboard with Tabs
   // ==========================================
 
-  function renderDashboard(successMsg) {
-    var all = getAllPosts();
-    var deleted = getDeletedSlugs();
+  function renderDashboard(activeTab, message) {
+    if (!ensureAdmin()) {
+      return renderLoginRequired();
+    }
+
+    activeTab = activeTab || 'review';
 
     var html = '';
     html += '<div class="admin-dashboard">';
+
+    // Header
     html += '<div class="admin-header-bar">';
-    html += '<h1 class="admin-page-title">' + t('adminDashboard') + '</h1>';
+    html += '<h1 class="admin-page-title">' + t('adminPanel') + '</h1>';
     html += '<div class="admin-header-actions">';
-    html += '<button class="admin-btn admin-btn-primary" id="adminNewPost">+ ' + t('adminNewPost') + '</button>';
-    html += '<button class="admin-btn admin-btn-outline" id="adminExport">⬇ ' + t('adminExport') + '</button>';
-    html += '<button class="admin-btn admin-btn-outline" id="adminLogout">' + t('adminLogout') + '</button>';
+    html += '<button class="admin-btn admin-btn-outline" id="adminLogout">' + t('logout') + '</button>';
     html += '</div>';
     html += '</div>';
 
-    if (successMsg) {
-      html += '<p class="admin-success">' + successMsg + '</p>';
+    // Tabs
+    html += '<div class="admin-tabs">';
+    html += '<button class="admin-tab-btn' + (activeTab === 'review' ? ' active' : '') + '" data-tab="review">' + t('adminTabReview') + '</button>';
+    html += '<button class="admin-tab-btn' + (activeTab === 'users' ? ' active' : '') + '" data-tab="users">' + t('adminTabUsers') + '</button>';
+    html += '<button class="admin-tab-btn' + (activeTab === 'posts' ? ' active' : '') + '" data-tab="posts">' + t('adminTabPosts') + '</button>';
+    html += '</div>';
+
+    // Message
+    if (message) {
+      html += '<p class="admin-success">' + message + '</p>';
     }
 
-    if (all.length === 0) {
-      html += '<div class="admin-empty">';
-      html += '<p>' + t('adminNoPosts') + '</p>';
-      html += '</div>';
-    } else {
-      html += '<div class="admin-table-wrap">';
-      html += '<table class="admin-table">';
-      html += '<thead><tr>';
-      html += '<th>' + t('adminColTitle') + '</th>';
-      html += '<th>' + t('adminColDate') + '</th>';
-      html += '<th>' + t('adminColCategory') + '</th>';
-      html += '<th>' + t('adminColActions') + '</th>';
-      html += '</tr></thead>';
-      html += '<tbody>';
-      for (var i = 0; i < all.length; i++) {
-        var p = all[i];
-        var isDeleted = deleted.indexOf(p.slug) !== -1;
-        var title = localized(p.title);
-        html += '<tr class="' + (isDeleted ? 'admin-row-deleted' : '') + '">';
-        html += '<td class="admin-cell-title">' + title + (isDeleted ? ' <span class="admin-badge-deleted">' + t('adminDeleted') + '</span>' : '') + '</td>';
-        html += '<td>' + p.date + '</td>';
-        html += '<td>' + localized(p.category) + '</td>';
-        html += '<td class="admin-cell-actions">';
-        html += '<button class="admin-btn-sm admin-btn-edit" data-slug="' + p.slug + '">✎</button>';
-        html += '<button class="admin-btn-sm admin-btn-delete" data-slug="' + p.slug + '">✕</button>';
-        html += '</td>';
-        html += '</tr>';
-      }
-      html += '</tbody></table>';
-      html += '</div>';
-    }
-
-    html += '<div class="admin-footer-bar">';
-    html += '<p class="admin-count">' + t('adminTotalPosts', { n: all.length }) + '</p>';
+    // Tab content placeholder (loaded async)
+    html += '<div id="adminTabContent" class="admin-tab-content">';
+    html += '<p style="text-align:center;padding:40px;color:var(--text-tertiary);">' + (t('loading') || '加载中...') + '</p>';
     html += '</div>';
+
     html += '</div>';
     return html;
   }
 
   // ==========================================
-  // Render: Post Editor (Add / Edit)
+  // Render: Review Queue Tab
+  // ==========================================
+
+  function renderReviewQueue(pendingPosts) {
+    var html = '';
+    if (!pendingPosts || pendingPosts.length === 0) {
+      html += '<div class="admin-empty">';
+      html += '<p>' + t('noPendingPosts') + '</p>';
+      html += '</div>';
+      return html;
+    }
+
+    for (var i = 0; i < pendingPosts.length; i++) {
+      var p = pendingPosts[i];
+      var title = localized(p.title);
+      var summary = localized(p.summary);
+      var content = localized(p.content);
+
+      html += '<div class="review-card" data-post-id="' + p._id + '">';
+      html += '<div class="review-card-header">';
+      html += '<div>';
+      html += '<h3 class="review-card-title">' + escHtml(title) + '</h3>';
+      html += '<span class="review-card-meta">' + (p.authorName || '') + ' · ' + (p.date || '') + '</span>';
+      html += '</div>';
+      html += '<span class="status-badge status-badge-pending">' + t('statusPending') + '</span>';
+      html += '</div>';
+      html += '<p class="review-card-summary">' + escHtml(summary) + '</p>';
+      html += '<details class="review-card-details">';
+      html += '<summary style="cursor:pointer;font-size:0.85rem;color:var(--accent);">' + (t('viewContent') || '查看正文') + '</summary>';
+      html += '<div class="review-card-content">' + content + '</div>';
+      html += '</details>';
+      html += '<div class="review-card-actions" style="margin-top:12px;">';
+      html += '<input type="text" class="admin-input review-comment-input" placeholder="' + t('reviewComment') + '" style="flex:1;min-width:150px;">';
+      html += '<button class="admin-btn admin-btn-primary btn-approve">✓ ' + t('approve') + '</button>';
+      html += '<button class="admin-btn admin-btn-delete btn-reject">✕ ' + t('reject') + '</button>';
+      html += '</div>';
+      html += '</div>';
+    }
+    return html;
+  }
+
+  // ==========================================
+  // Render: User Management Tab
+  // ==========================================
+
+  function renderUserManagement(users) {
+    if (!users || users.length === 0) {
+      return '<div class="admin-empty"><p>' + (t('noUsers') || '没有用户') + '</p></div>';
+    }
+
+    var html = '';
+    html += '<div class="admin-table-wrap">';
+    html += '<table class="admin-user-table">';
+    html += '<thead><tr>';
+    html += '<th>Email</th>';
+    html += '<th>' + t('displayName') + '</th>';
+    html += '<th>' + t('userRoleLabel') + '</th>';
+    html += '<th>' + t('adminColActions') + '</th>';
+    html += '</tr></thead><tbody>';
+
+    for (var i = 0; i < users.length; i++) {
+      var u = users[i];
+      var isAdmin = u.role === 'admin';
+      var isSelf = Auth.getCurrentUser() && Auth.getCurrentUser().uid === u._id;
+
+      html += '<tr>';
+      html += '<td>' + escHtml(u.email || '') + (isSelf ? ' <span style="color:var(--text-tertiary);">(' + (t('you') || '你') + ')</span>' : '') + '</td>';
+      html += '<td>' + escHtml(u.displayName || '') + '</td>';
+      html += '<td>';
+      html += '<select class="admin-role-select" data-uid="' + u._id + '"' + (isSelf ? ' disabled' : '') + '>';
+      html += '<option value="user"' + (!isAdmin ? ' selected' : '') + '>' + t('userRoleUser') + '</option>';
+      html += '<option value="admin"' + (isAdmin ? ' selected' : '') + '>' + t('userRoleAdmin') + '</option>';
+      html += '</select>';
+      html += '</td>';
+      html += '<td>';
+      if (!isSelf) {
+        html += '<button class="admin-btn-sm admin-btn-delete btn-delete-user" data-uid="' + u._id + '">' + t('adminDeleteUser') + '</button>';
+      }
+      html += '</td></tr>';
+    }
+
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  // ==========================================
+  // Render: Post Management Tab
+  // ==========================================
+
+  function renderPostManagement(allPosts) {
+    if (!allPosts || allPosts.length === 0) {
+      return '<div class="admin-empty"><p>' + t('adminNoPosts') + '</p></div>';
+    }
+
+    var html = '';
+    html += '<div class="admin-table-wrap">';
+    html += '<table class="admin-table">';
+    html += '<thead><tr>';
+    html += '<th>' + t('adminColTitle') + '</th>';
+    html += '<th>' + t('adminColDate') + '</th>';
+    html += '<th>' + (t('author') || '作者') + '</th>';
+    html += '<th>' + (t('status') || '状态') + '</th>';
+    html += '<th>' + t('adminColActions') + '</th>';
+    html += '</tr></thead><tbody>';
+
+    for (var i = 0; i < allPosts.length; i++) {
+      var p = allPosts[i];
+      var status = p.status || 'approved';
+      var badgeClass = 'status-badge-approved';
+      var badgeText = t('statusApproved');
+      if (status === 'pending') {
+        badgeClass = 'status-badge-pending';
+        badgeText = t('statusPending');
+      } else if (status === 'rejected') {
+        badgeClass = 'status-badge-rejected';
+        badgeText = t('statusRejected');
+      }
+
+      html += '<tr>';
+      html += '<td class="admin-cell-title">' + escHtml(localized(p.title)) + '</td>';
+      html += '<td>' + (p.date || '') + '</td>';
+      html += '<td>' + escHtml(p.authorName || '') + '</td>';
+      html += '<td><span class="status-badge ' + badgeClass + '">' + badgeText + '</span></td>';
+      html += '<td class="admin-cell-actions">';
+      html += '<button class="admin-btn-sm admin-btn-edit btn-edit-post" data-post-id="' + (p._id || '') + '" data-slug="' + (p.slug || '') + '">✎</button>';
+      html += '<button class="admin-btn-sm admin-btn-delete btn-delete-post" data-post-id="' + (p._id || '') + '">✕</button>';
+      html += '</td></tr>';
+    }
+
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  // ==========================================
+  // Render: Post Editor (admin editing)
   // ==========================================
 
   function renderEditor(post) {
+    if (!ensureAdmin()) return renderLoginRequired();
+
     var isNew = !post;
     var p = post || {
+      _id: '',
       slug: '',
       date: new Date().toISOString().split('T')[0],
       category: { zh: '', en: '' },
@@ -325,6 +332,9 @@ var Admin = (function () {
       title: { zh: '', en: '' },
       summary: { zh: '', en: '' },
       content: { zh: '', en: '' },
+      status: 'approved',
+      authorId: Auth.getCurrentUser().uid,
+      authorName: Auth.getCurrentUser().displayName || 'Admin',
     };
 
     var html = '';
@@ -338,6 +348,8 @@ var Admin = (function () {
     html += '</div>';
 
     html += '<form id="adminEditorForm" class="admin-editor-form">';
+    html += '<input type="hidden" name="_id" value="' + escAttr(p._id || '') + '">';
+    html += '<input type="hidden" name="status" value="' + escAttr(p.status || 'approved') + '">';
 
     // Slug
     html += '<div class="admin-form-group">';
@@ -346,14 +358,12 @@ var Admin = (function () {
     html += '</div>';
 
     // Date
-    html += '<div class="admin-form-row">';
     html += '<div class="admin-form-group">';
     html += '<label class="admin-label">' + t('adminDate') + '</label>';
     html += '<input type="date" class="admin-input" name="date" value="' + p.date + '" required>';
     html += '</div>';
-    html += '</div>';
 
-    // Category (bilingual)
+    // Category
     html += '<div class="admin-form-row admin-form-row-2">';
     html += '<div class="admin-form-group">';
     html += '<label class="admin-label">' + t('adminCategoryZh') + '</label>';
@@ -367,7 +377,7 @@ var Admin = (function () {
 
     // Tags
     html += '<div class="admin-form-group">';
-    html += '<label class="admin-label">' + t('adminTags') + ' <span class="admin-label-hint">' + t('adminTagsHint') + '</span></label>';
+    html += '<label class="admin-label">' + t('adminTags') + '</label>';
     html += '<div id="adminTagsContainer" class="admin-tags-editor">';
     for (var i = 0; i < p.tags.length; i++) {
       html += renderTagRow(p.tags[i], i);
@@ -412,120 +422,275 @@ var Admin = (function () {
     html += '</div>';
     html += '</div>';
 
-    html += '</form>';
-    html += '</div>';
+    html += '</form></div>';
     return html;
   }
 
   function renderTagRow(tag, index) {
     return '<div class="admin-tag-row">' +
-      '<input type="text" class="admin-input" name="tagZh_' + index + '" value="' + escAttr(tag.zh) + '" placeholder="中文标签">' +
-      '<input type="text" class="admin-input" name="tagEn_' + index + '" value="' + escAttr(tag.en) + '" placeholder="English tag">' +
+      '<input type="text" class="admin-input" name="tagZh_' + index + '" value="' + escAttr(tag.zh || '') + '" placeholder="中文标签">' +
+      '<input type="text" class="admin-input" name="tagEn_' + index + '" value="' + escAttr(tag.en || '') + '" placeholder="English tag">' +
       '<button type="button" class="admin-btn-sm admin-btn-delete admin-remove-tag">✕</button>' +
       '</div>';
   }
 
   // ==========================================
-  // HTML Escaping Helpers
+  // Render: Submit Post (for regular users)
   // ==========================================
 
-  function escHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
+  function renderSubmitPost(successMsg) {
+    if (!Auth.isLoggedIn()) {
+      return '<div class="admin-login"><div class="admin-login-card">' +
+        '<p>' + (t('loginRequired') || '请先登录再发帖') + '</p>' +
+        '<button class="admin-btn admin-btn-primary" id="adminGoLogin">' + (t('login') || '登录') + '</button>' +
+        '</div></div>';
+    }
 
-  function escAttr(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/"/g, '&quot;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+    var html = '';
+    html += '<div class="submit-post-page">';
+    html += '<h1 class="page-title">' + t('newPostTitle') + '</h1>';
+
+    if (successMsg) {
+      html += '<p class="admin-success">' + successMsg + '</p>';
+    } else {
+      html += '<div class="submit-notice">' + t('postPendingNotice') + '</div>';
+    }
+
+    html += '<form id="submitPostForm" class="admin-editor-form">';
+
+    // Category
+    html += '<div class="admin-form-row admin-form-row-2">';
+    html += '<div class="admin-form-group">';
+    html += '<label class="admin-label">' + t('adminCategoryZh') + '</label>';
+    html += '<input type="text" class="admin-input" name="categoryZh" placeholder="例如：技术">';
+    html += '</div>';
+    html += '<div class="admin-form-group">';
+    html += '<label class="admin-label">' + t('adminCategoryEn') + '</label>';
+    html += '<input type="text" class="admin-input" name="categoryEn" placeholder="e.g. Tech">';
+    html += '</div>';
+    html += '</div>';
+
+    // Tags
+    html += '<div class="admin-form-group">';
+    html += '<label class="admin-label">' + t('adminTags') + '</label>';
+    html += '<div id="submitTagsContainer" class="admin-tags-editor">';
+    html += renderTagRow({ zh: '', en: '' }, 0);
+    html += '</div>';
+    html += '<button type="button" class="admin-btn admin-btn-sm admin-btn-outline" id="submitAddTag">+ ' + t('adminAddTag') + '</button>';
+    html += '</div>';
+
+    // Title
+    html += '<div class="admin-form-row admin-form-row-2">';
+    html += '<div class="admin-form-group">';
+    html += '<label class="admin-label">' + t('adminTitleZh') + ' <span style="color:#ef4444;">*</span></label>';
+    html += '<input type="text" class="admin-input" name="titleZh" placeholder="中文标题" required>';
+    html += '</div>';
+    html += '<div class="admin-form-group">';
+    html += '<label class="admin-label">' + t('adminTitleEn') + '</label>';
+    html += '<input type="text" class="admin-input" name="titleEn" placeholder="English title">';
+    html += '</div>';
+    html += '</div>';
+
+    // Summary
+    html += '<div class="admin-form-row admin-form-row-2">';
+    html += '<div class="admin-form-group">';
+    html += '<label class="admin-label">' + t('adminSummaryZh') + '</label>';
+    html += '<textarea class="admin-textarea" name="summaryZh" rows="3"></textarea>';
+    html += '</div>';
+    html += '<div class="admin-form-group">';
+    html += '<label class="admin-label">' + t('adminSummaryEn') + '</label>';
+    html += '<textarea class="admin-textarea" name="summaryEn" rows="3"></textarea>';
+    html += '</div>';
+    html += '</div>';
+
+    // Content
+    html += '<div class="admin-form-row admin-form-row-2">';
+    html += '<div class="admin-form-group">';
+    html += '<label class="admin-label">' + t('adminContentZh') + ' <span style="color:#ef4444;">*</span> <span class="admin-label-hint">HTML</span></label>';
+    html += '<textarea class="admin-textarea admin-textarea-lg" name="contentZh" rows="16" required></textarea>';
+    html += '</div>';
+    html += '<div class="admin-form-group">';
+    html += '<label class="admin-label">' + t('adminContentEn') + ' <span class="admin-label-hint">HTML</span></label>';
+    html += '<textarea class="admin-textarea admin-textarea-lg" name="contentEn" rows="16"></textarea>';
+    html += '</div>';
+    html += '</div>';
+
+    html += '<div style="text-align:right;">';
+    html += '<button type="submit" class="admin-btn admin-btn-primary" style="padding:12px 32px;font-size:1rem;">' + t('submitPost') + '</button>';
+    html += '</div>';
+
+    html += '</form></div>';
+    return html;
   }
 
   // ==========================================
-  // Event Binding (called after HTML is injected)
+  // Event Binding
   // ==========================================
-
-  function bindLoginEvents() {
-    var form = document.getElementById('adminLoginForm');
-    if (!form) return;
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var pw = document.getElementById('adminPassword').value;
-      if (!pw) return;
-      login(pw).then(function (ok) {
-        if (ok) {
-          window.location.hash = '#/admin';
-        } else {
-          document.getElementById('main').innerHTML = renderLogin(t('adminWrongPassword'));
-          bindLoginEvents();
-        }
-      });
-    });
-  }
 
   function bindDashboardEvents() {
-    var newBtn = document.getElementById('adminNewPost');
-    var exportBtn = document.getElementById('adminExport');
-    var logoutBtn = document.getElementById('adminLogout');
-    var editBtns = document.querySelectorAll('.admin-btn-edit');
-    var deleteBtns = document.querySelectorAll('.admin-btn-delete');
+    // Tab switching
+    var tabs = document.querySelectorAll('.admin-tab-btn');
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].addEventListener('click', function () {
+        var tab = this.getAttribute('data-tab');
+        window.location.hash = '#/admin/' + tab;
+      });
+    }
 
-    if (newBtn) {
-      newBtn.addEventListener('click', function () {
-        window.location.hash = '#/admin/new';
-      });
-    }
-    if (exportBtn) {
-      exportBtn.addEventListener('click', function () {
-        downloadPostsJS();
-        showToast(t('adminExportDone'));
-      });
-    }
+    // Logout
+    var logoutBtn = document.getElementById('adminLogout');
     if (logoutBtn) {
       logoutBtn.addEventListener('click', function () {
-        logout();
-        window.location.hash = '#/admin';
+        Auth.logout().then(function () {
+          window.location.hash = '#/';
+        });
       });
     }
 
-    for (var i = 0; i < editBtns.length; i++) {
-      editBtns[i].addEventListener('click', function () {
-        var slug = this.getAttribute('data-slug');
-        window.location.hash = '#/admin/edit/' + slug;
+    // Load tab content async
+    loadTabContent();
+  }
+
+  function loadTabContent() {
+    var container = document.getElementById('adminTabContent');
+    if (!container) return;
+
+    var hash = window.location.hash || '';
+    var tab = 'review';
+    if (hash.indexOf('#/admin/users') === 0) tab = 'users';
+    else if (hash.indexOf('#/admin/posts') === 0) tab = 'posts';
+    else if (hash.indexOf('#/admin/review') === 0) tab = 'review';
+
+    switch (tab) {
+      case 'review':
+        getPendingPosts().then(function (pending) {
+          if (container) container.innerHTML = renderReviewQueue(pending);
+          bindReviewEvents();
+        });
+        break;
+      case 'users':
+        getAllUsers().then(function (users) {
+          if (container) container.innerHTML = renderUserManagement(users);
+          bindUserEvents();
+        });
+        break;
+      case 'posts':
+        getAllPosts().then(function (all) {
+          if (container) container.innerHTML = renderPostManagement(all);
+          bindPostManagementEvents();
+        });
+        break;
+    }
+  }
+
+  function bindReviewEvents() {
+    // Approve buttons
+    var approveBtns = document.querySelectorAll('.btn-approve');
+    for (var i = 0; i < approveBtns.length; i++) {
+      approveBtns[i].addEventListener('click', function () {
+        var card = this.closest('.review-card');
+        var postId = card.getAttribute('data-post-id');
+        var commentInput = card.querySelector('.review-comment-input');
+        var comment = commentInput ? commentInput.value : '';
+        if (confirm(t('reviewApproveConfirm'))) {
+          approvePost(postId, comment).then(function () {
+            card.style.opacity = '0.4';
+            card.querySelector('.review-card-actions').innerHTML = '<span style="color:var(--text-tertiary);">✓ ' + t('statusApproved') + '</span>';
+          });
+        }
       });
     }
 
-    for (var j = 0; j < deleteBtns.length; j++) {
-      deleteBtns[j].addEventListener('click', function () {
-        var slug = this.getAttribute('data-slug');
-        if (confirm(t('adminConfirmDelete'))) {
-          deletePost(slug);
-          document.getElementById('main').innerHTML = renderDashboard(t('adminPostDeleted'));
-          bindDashboardEvents();
+    // Reject buttons
+    var rejectBtns = document.querySelectorAll('.btn-reject');
+    for (var j = 0; j < rejectBtns.length; j++) {
+      rejectBtns[j].addEventListener('click', function () {
+        var card = this.closest('.review-card');
+        var postId = card.getAttribute('data-post-id');
+        var commentInput = card.querySelector('.review-comment-input');
+        var comment = commentInput ? commentInput.value : '';
+        if (confirm(t('reviewRejectConfirm'))) {
+          rejectPost(postId, comment).then(function () {
+            card.style.opacity = '0.4';
+            card.querySelector('.review-card-actions').innerHTML = '<span style="color:#ef4444;">✕ ' + t('statusRejected') + '</span>';
+          });
         }
       });
     }
   }
 
-  function bindEditorEvents(post) {
+  function bindUserEvents() {
+    // Role change
+    var selects = document.querySelectorAll('.admin-role-select');
+    for (var i = 0; i < selects.length; i++) {
+      selects[i].addEventListener('change', function () {
+        var uid = this.getAttribute('data-uid');
+        var newRole = this.value;
+        updateUserRole(uid, newRole).then(function () {
+          alert(t('userRoleUpdated') || '角色已更新');
+        });
+      });
+    }
+
+    // Delete user
+    var deleteBtns = document.querySelectorAll('.btn-delete-user');
+    for (var j = 0; j < deleteBtns.length; j++) {
+      deleteBtns[j].addEventListener('click', function () {
+        var uid = this.getAttribute('data-uid');
+        if (confirm(t('confirmDeleteUser'))) {
+          // Delete from Firestore (auth deletion requires admin SDK)
+          usersRef().doc(uid).delete().then(function () {
+            alert(t('adminPostDeleted'));
+            window.location.reload();
+          }).catch(function () {
+            alert(t('authUnknownError'));
+          });
+        }
+      });
+    }
+  }
+
+  function bindPostManagementEvents() {
+    // Edit post
+    var editBtns = document.querySelectorAll('.btn-edit-post');
+    for (var i = 0; i < editBtns.length; i++) {
+      editBtns[i].addEventListener('click', function () {
+        var postId = this.getAttribute('data-post-id');
+        if (postId) {
+          window.location.hash = '#/admin/edit/' + postId;
+        }
+      });
+    }
+
+    // Delete post
+    var deleteBtns = document.querySelectorAll('.btn-delete-post');
+    for (var j = 0; j < deleteBtns.length; j++) {
+      deleteBtns[j].addEventListener('click', function () {
+        var postId = this.getAttribute('data-post-id');
+        if (postId && confirm(t('adminConfirmDelete'))) {
+          deletePost(postId).then(function () {
+            alert(t('adminPostDeleted'));
+            window.location.hash = '#/admin/posts';
+          });
+        }
+      });
+    }
+  }
+
+  function bindEditorEvents(originalPost) {
     var backBtn = document.getElementById('adminBack');
     var saveBtn = document.getElementById('adminSave');
     var addTagBtn = document.getElementById('adminAddTag');
-    var titleZhInput = document.querySelector('[name="titleZh"]');
 
     if (backBtn) {
       backBtn.addEventListener('click', function () {
-        window.location.hash = '#/admin';
+        window.history.back();
       });
     }
 
     if (saveBtn) {
       saveBtn.addEventListener('click', function () {
-        savePostFromForm(post);
+        savePostFromForm(originalPost);
       });
     }
 
@@ -537,19 +702,6 @@ var Admin = (function () {
         row.innerHTML = renderTagRow({ zh: '', en: '' }, index);
         container.appendChild(row.firstElementChild);
         bindTagRemoveEvents();
-      });
-    }
-
-    // Auto-generate slug from Chinese title
-    if (titleZhInput && !post) {
-      titleZhInput.addEventListener('blur', function () {
-        var slugInput = document.querySelector('[name="slug"]');
-        if (slugInput && !slugInput.value) {
-          var slug = generateSlug(titleZhInput.value);
-          if (slug) {
-            slugInput.value = slug;
-          }
-        }
       });
     }
 
@@ -565,19 +717,73 @@ var Admin = (function () {
     }
   }
 
-  function savePostFromForm(originalPost) {
-    var form = document.getElementById('adminEditorForm');
-    if (!form) return;
+  function bindSubmitEvents() {
+    var form = document.getElementById('submitPostForm');
+    var addTagBtn = document.getElementById('submitAddTag');
 
-    var formData = {};
-    var inputs = form.querySelectorAll('input, textarea');
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var data = collectFormData(form);
+        if (!data.title.zh && !data.title.en) {
+          alert(t('adminValidationTitle'));
+          return;
+        }
+        if (!data.content.zh && !data.content.en) {
+          alert((t('contentRequired') || '请填写正文内容'));
+          return;
+        }
+
+        Auth.submitPost(data).then(function () {
+          document.getElementById('main').innerHTML = renderSubmitPost(t('postSubmitted'));
+        }).catch(function (err) {
+          alert(err.message);
+        });
+      });
+    }
+
+    if (addTagBtn) {
+      addTagBtn.addEventListener('click', function () {
+        var container = document.getElementById('submitTagsContainer');
+        var index = container.children.length;
+        var row = document.createElement('div');
+        row.innerHTML = renderTagRow({ zh: '', en: '' }, index);
+        container.appendChild(row.firstElementChild);
+        bindSubmitTagRemoveEvents();
+      });
+    }
+
+    bindSubmitTagRemoveEvents();
+  }
+
+  function bindSubmitTagRemoveEvents() {
+    var removeBtns = document.querySelectorAll('#submitTagsContainer .admin-remove-tag');
+    for (var i = 0; i < removeBtns.length; i++) {
+      removeBtns[i].onclick = function () {
+        this.parentElement.remove();
+      };
+    }
+  }
+
+  function bindLoginRequiredEvents() {
+    var btn = document.getElementById('adminGoLogin');
+    if (btn) {
+      btn.addEventListener('click', function () {
+        Auth.showModal('login');
+      });
+    }
+  }
+
+  function collectFormData(form) {
+    var data = {};
+    var inputs = form.querySelectorAll('input, textarea, select');
     for (var i = 0; i < inputs.length; i++) {
-      formData[inputs[i].name] = inputs[i].value;
+      data[inputs[i].name] = inputs[i].value;
     }
 
     // Build tags
-    var tagContainer = document.getElementById('adminTagsContainer');
-    var tagRows = tagContainer.querySelectorAll('.admin-tag-row');
+    var tagContainer = form.querySelector('.admin-tags-editor');
+    var tagRows = tagContainer ? tagContainer.querySelectorAll('.admin-tag-row') : [];
     var tags = [];
     for (var j = 0; j < tagRows.length; j++) {
       var zhInput = tagRows[j].querySelector('[name^="tagZh_"]');
@@ -585,46 +791,78 @@ var Admin = (function () {
       if (zhInput && enInput) {
         var zh = zhInput.value.trim();
         var en = enInput.value.trim();
-        if (zh || en) {
-          tags.push({ zh: zh, en: en });
-        }
+        if (zh || en) tags.push({ zh: zh, en: en });
       }
     }
 
-    var post = {
-      slug: formData.slug || generateSlug(formData.titleZh || formData.titleEn || 'post'),
-      date: formData.date || new Date().toISOString().split('T')[0],
-      category: { zh: formData.categoryZh || '', en: formData.categoryEn || '' },
+    return {
+      title: { zh: data.titleZh || '', en: data.titleEn || '' },
+      summary: { zh: data.summaryZh || '', en: data.summaryEn || '' },
+      content: { zh: data.contentZh || '', en: data.contentEn || '' },
+      category: { zh: data.categoryZh || '', en: data.categoryEn || '' },
       tags: tags,
-      title: { zh: formData.titleZh || '', en: formData.titleEn || '' },
-      summary: { zh: formData.summaryZh || '', en: formData.summaryEn || '' },
-      content: { zh: formData.contentZh || '', en: formData.contentEn || '' },
+      slug: data.slug || '',
+      date: data.date || new Date().toISOString().split('T')[0],
     };
+  }
 
-    // Validate
-    if (!post.title.zh && !post.title.en) {
+  function savePostFromForm(originalPost) {
+    var form = document.getElementById('adminEditorForm');
+    if (!form) return;
+
+    var postData = collectFormData(form);
+    var postId = form.querySelector('[name="_id"]').value;
+
+    if (!postData.title.zh && !postData.title.en) {
       alert(t('adminValidationTitle'));
       return;
     }
 
-    if (originalPost) {
-      updatePost(originalPost.slug, post);
-      showToast(t('adminPostUpdated'));
+    if (postId && originalPost) {
+      // Update existing Firestore post
+      updatePost(postId, {
+        title: postData.title,
+        summary: postData.summary,
+        content: postData.content,
+        category: postData.category,
+        tags: postData.tags,
+        slug: postData.slug,
+      }).then(function () {
+        alert(t('adminPostUpdated'));
+        window.location.hash = '#/admin/posts';
+      }).catch(function (err) {
+        alert(err.message);
+      });
     } else {
-      addPost(post);
-      showToast(t('adminPostCreated'));
-    }
+      // Create new post as admin (auto-approved)
+      var doc = postData;
+      doc.authorId = Auth.getCurrentUser().uid;
+      doc.authorName = Auth.getCurrentUser().displayName || 'Admin';
+      doc.status = 'approved';
+      doc.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      doc.reviewComment = '';
+      doc.reviewedBy = '';
+      doc.reviewedAt = null;
 
-    window.location.hash = '#/admin';
+      postsRef().add(doc).then(function () {
+        alert(t('adminPostCreated'));
+        window.location.hash = '#/admin/posts';
+      }).catch(function (err) {
+        alert(err.message);
+      });
+    }
   }
 
   // ==========================================
-  // Toast Notification
+  // Helpers
   // ==========================================
 
-  function showToast(msg) {
-    // Use the dashboard success message area
-    // For now, just navigate to dashboard which will show the message
+  function escHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function escAttr(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   // ==========================================
@@ -632,49 +870,87 @@ var Admin = (function () {
   // ==========================================
 
   function render(route) {
-    if (!isLoggedIn()) {
-      return renderLogin();
+    // Check if admin editor
+    if (route.page === 'admin' && route.sub === 'edit' && route.slug) {
+      if (!isLoggedIn()) return renderLoginRequired();
+      // The slug is the Firestore post ID
+      return '<div class="admin-dashboard"><p style="text-align:center;padding:40px;color:var(--text-tertiary);">' +
+        (t('loading') || '加载中...') + '</p></div>';
     }
 
-    // route: { page: 'admin', sub: 'dashboard'|'new'|'edit', slug?: string }
-    if (route.sub === 'new') {
-      return renderEditor(null);
+    // Submit post page
+    if (route.page === 'submit') {
+      return renderSubmitPost();
     }
-    if (route.sub === 'edit' && route.slug) {
-      var post = findPost(route.slug);
-      if (!post) {
-        return renderDashboard();
-      }
-      return renderEditor(post);
+
+    // Admin dashboard
+    if (route.page === 'admin') {
+      return renderDashboard(route.sub);
     }
-    return renderDashboard();
+
+    return renderLoginRequired();
   }
 
   function bindEvents(route) {
-    if (!isLoggedIn()) {
-      bindLoginEvents();
+    // Admin editor (async load post data)
+    if (route.page === 'admin' && route.sub === 'edit' && route.slug) {
+      postsRef().doc(route.slug).get().then(function (doc) {
+        if (doc.exists) {
+          var post = docToPost(doc);
+          document.getElementById('main').innerHTML = renderEditor(post);
+          bindEditorEvents(post);
+        } else {
+          document.getElementById('main').innerHTML = renderDashboard('posts');
+          bindDashboardEvents();
+        }
+      }).catch(function () {
+        window.location.hash = '#/admin/posts';
+      });
       return;
     }
 
-    if (route.sub === 'new') {
-      bindEditorEvents(null);
-    } else if (route.sub === 'edit' && route.slug) {
-      var post = findPost(route.slug);
-      bindEditorEvents(post);
-    } else {
+    // Submit page
+    if (route.page === 'submit') {
+      bindSubmitEvents();
+      return;
+    }
+
+    // Admin dashboard
+    if (route.page === 'admin') {
+      if (!isLoggedIn()) {
+        bindLoginRequiredEvents();
+        return;
+      }
       bindDashboardEvents();
+      return;
     }
   }
 
   // ==========================================
-  // Filter posts for public display
+  // Export (download Firestore posts as JS)
   // ==========================================
 
-  function getPublicPosts() {
-    var all = getAllPosts();
-    var deleted = getDeletedSlugs();
-    return all.filter(function (p) {
-      return deleted.indexOf(p.slug) === -1;
+  function exportPostsJS() {
+    return getAllPosts().then(function (allPosts) {
+      var content = '/**\n * Blog Posts Data\n * Exported from Firestore on ' +
+        new Date().toISOString().split('T')[0] + '\n */\n\nvar posts = ' +
+        JSON.stringify(allPosts, null, 2) + ';\n';
+      return content;
+    });
+  }
+
+  function downloadPostsJS() {
+    exportPostsJS().then(function (content) {
+      var blob = new Blob([content], { type: 'application/javascript' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'posts.js';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      alert(t('adminExportDone'));
     });
   }
 
@@ -684,17 +960,12 @@ var Admin = (function () {
 
   return {
     isLoggedIn: isLoggedIn,
-    login: login,
-    logout: logout,
+    ensureAdmin: ensureAdmin,
     render: render,
     bindEvents: bindEvents,
-    getPublicPosts: getPublicPosts,
-    getAllPosts: getAllPosts,
-    findPost: findPost,
-    addPost: addPost,
-    updatePost: updatePost,
-    deletePost: deletePost,
+    approvePost: approvePost,
+    rejectPost: rejectPost,
     downloadPostsJS: downloadPostsJS,
-    exportPostsJS: exportPostsJS,
+    getAllPosts: getAllPosts,
   };
 })();

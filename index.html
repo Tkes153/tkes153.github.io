@@ -19,6 +19,7 @@
         <a href="#/about" class="nav-link" data-i18n="about">About</a>
       </nav>
       <div class="header-actions">
+        <div id="authArea" class="header-auth"></div>
         <button class="icon-btn" id="langToggle" aria-label="Switch language" title="Switch language">
           <span class="lang-text">中</span>
         </button>
@@ -39,6 +40,9 @@
     <!-- SPA content rendered here -->
   </main>
 
+  <!-- Auth Modal (Login / Register) -->
+  <div class="modal" id="authModal"></div>
+
   <!-- Footer -->
   <footer class="footer">
     <div class="footer-inner">
@@ -50,7 +54,15 @@
   <!-- Back to Top -->
   <button class="back-to-top" id="backToTop" aria-label="Back to top">↑</button>
 
+  <!-- Firebase SDK (compat / namespaced) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+  <!-- Application Scripts (order matters) -->
+  <script src="js/firebase-config.js"></script>
   <script src="js/i18n.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/posts.js"></script>
   <script src="js/admin.js"></script>
   <script src="js/main.js"></script>

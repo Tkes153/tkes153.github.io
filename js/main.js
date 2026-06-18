@@ -98,85 +98,110 @@
   // Page Renderers
   // ==========================================
 
-  function renderBlogList() {
+  function renderBlogList(callback) {
     var html = '';
-    var allPosts = getPosts();
 
     html += '<h1 class="page-title">' + t('siteTitle') + '</h1>';
     html += '<p class="page-subtitle">' + t('blogSubtitle') + '</p>';
+    // Placeholder while loading
+    html += '<div id="blogListContent"><p style="text-align:center;padding:40px;color:var(--text-tertiary);">' + (t('loading') || 'Loading...') + '</p></div>';
 
-    if (allPosts.length === 0) {
-      html += '<div class="empty-state">';
-      html += '<div class="empty-state-icon">📝</div>';
-      html += '<div class="empty-state-title">' + t('noPosts') + '</div>';
-      html += '<p>' + t('noPostsDesc') + '</p>';
-      html += '</div>';
-    } else {
-      html += '<div class="post-list">';
-      for (var i = 0; i < allPosts.length; i++) {
-        var post = allPosts[i];
-        var title = localized(post.title);
-        var summary = localized(post.summary);
-        var date = formatDate(post.date);
-        var readingTime = estimateReadingTime(localized(post.content));
-        var category = localized(post.category);
-        var slug = post.slug;
-
-        html += '<article class="post-card" data-slug="' + slug + '">';
-        html += '<time class="post-card-date">' + date + ' · ' + category + '</time>';
-        html += '<h2 class="post-card-title">' + title + '</h2>';
-        html += '<p class="post-card-summary">' + summary + '</p>';
-        html += '<div class="post-card-meta">';
-        for (var j = 0; j < post.tags.length; j++) {
-          html += '<span class="post-card-tag">' + localized(post.tags[j]) + '</span>';
-        }
-        html += '<span class="post-card-reading-time">' + t('readingTime', { n: readingTime }) + '</span>';
-        html += '</div>';
-        html += '</article>';
-      }
-      html += '</div>';
+    // If callback provided, use it; otherwise resolve after DOM insert
+    if (callback) {
+      callback(html);
     }
-
     return html;
   }
 
-  function renderPostDetail(slug) {
-    var allPosts = getPosts();
-    var post = null;
-    for (var i = 0; i < allPosts.length; i++) {
-      if (allPosts[i].slug === slug) {
-        post = allPosts[i];
-        break;
+  function loadBlogListContent() {
+    var container = document.getElementById('blogListContent');
+    if (!container) return;
+    getPosts().then(function (allPosts) {
+      var html = '';
+      if (allPosts.length === 0) {
+        html += '<div class="empty-state">';
+        html += '<div class="empty-state-icon">📝</div>';
+        html += '<div class="empty-state-title">' + t('noPosts') + '</div>';
+        html += '<p>' + t('noPostsDesc') + '</p>';
+        html += '</div>';
+      } else {
+        html += '<div class="post-list">';
+        for (var i = 0; i < allPosts.length; i++) {
+          var post = allPosts[i];
+          var title = localized(post.title);
+          var summary = localized(post.summary);
+          var date = formatDate(post.date);
+          var readingTime = estimateReadingTime(localized(post.content));
+          var category = localized(post.category);
+          var slug = post.slug;
+
+          html += '<article class="post-card" data-slug="' + slug + '">';
+          html += '<time class="post-card-date">' + date + ' · ' + category + '</time>';
+          html += '<h2 class="post-card-title">' + title + '</h2>';
+          html += '<p class="post-card-summary">' + summary + '</p>';
+          html += '<div class="post-card-meta">';
+          for (var j = 0; j < post.tags.length; j++) {
+            html += '<span class="post-card-tag">' + localized(post.tags[j]) + '</span>';
+          }
+          html += '<span class="post-card-reading-time">' + t('readingTime', { n: readingTime }) + '</span>';
+          html += '</div>';
+          html += '</article>';
+        }
+        html += '</div>';
       }
-    }
+      container.innerHTML = html;
+      attachPostCardListeners();
+    });
+  }
 
-    if (!post) {
-      return renderNotFound();
-    }
-
-    var title = localized(post.title);
-    var content = localized(post.content);
-    var date = formatDate(post.date);
-    var readingTime = estimateReadingTime(content);
-    var category = localized(post.category);
-
+  function renderPostDetail(slug) {
     var html = '';
-    html += '<article class="post-detail">';
-    html += '<a href="#/" class="back-link">' + t('backToBlog') + '</a>';
-    html += '<header class="post-detail-header">';
-    html += '<time class="post-detail-date">' + t('postedOn') + ' ' + date + ' · ' + category + ' · ' + t('readingTime', { n: readingTime }) + '</time>';
-    html += '<h1 class="post-detail-title">' + title + '</h1>';
-    html += '<div class="post-detail-tags">';
-    for (var j = 0; j < post.tags.length; j++) {
-      html += '<span class="post-card-tag">' + localized(post.tags[j]) + '</span>';
-    }
-    html += '</div>';
-    html += '<hr class="post-detail-divider">';
-    html += '</header>';
-    html += '<div class="post-detail-body">' + content + '</div>';
-    html += '</article>';
-
+    html += '<div id="postDetailContent"><p style="text-align:center;padding:60px;color:var(--text-tertiary);">' + (t('loading') || 'Loading...') + '</p></div>';
+    loadPostDetailContent(slug);
     return html;
+  }
+
+  function loadPostDetailContent(slug) {
+    var container = document.getElementById('postDetailContent');
+    if (!container) return;
+
+    getPosts().then(function (allPosts) {
+      var post = null;
+      for (var i = 0; i < allPosts.length; i++) {
+        if (allPosts[i].slug === slug) {
+          post = allPosts[i];
+          break;
+        }
+      }
+
+      if (!post) {
+        container.innerHTML = renderNotFound();
+        return;
+      }
+
+      var title = localized(post.title);
+      var content = localized(post.content);
+      var date = formatDate(post.date);
+      var readingTime = estimateReadingTime(content);
+      var category = localized(post.category);
+
+      var html = '';
+      html += '<article class="post-detail">';
+      html += '<a href="#/" class="back-link">' + t('backToBlog') + '</a>';
+      html += '<header class="post-detail-header">';
+      html += '<time class="post-detail-date">' + t('postedOn') + ' ' + date + ' · ' + category + ' · ' + t('readingTime', { n: readingTime }) + '</time>';
+      html += '<h1 class="post-detail-title">' + title + '</h1>';
+      html += '<div class="post-detail-tags">';
+      for (var j = 0; j < post.tags.length; j++) {
+        html += '<span class="post-card-tag">' + localized(post.tags[j]) + '</span>';
+      }
+      html += '</div>';
+      html += '<hr class="post-detail-divider">';
+      html += '</header>';
+      html += '<div class="post-detail-body">' + content + '</div>';
+      html += '</article>';
+      container.innerHTML = html;
+    });
   }
 
   function renderAbout() {
@@ -218,9 +243,23 @@
     var hash = window.location.hash || '#/';
     var path = hash.replace(/^#/, '') || '/';
 
+    // Submit post route
+    if (path === '/submit') {
+      return { path: path, page: 'submit', sub: null, slug: null };
+    }
+
     // Admin routes
     if (path === '/admin') {
-      return { path: path, page: 'admin', sub: 'dashboard', slug: null };
+      return { path: path, page: 'admin', sub: 'review', slug: null };
+    }
+    if (path === '/admin/review') {
+      return { path: path, page: 'admin', sub: 'review', slug: null };
+    }
+    if (path === '/admin/users') {
+      return { path: path, page: 'admin', sub: 'users', slug: null };
+    }
+    if (path === '/admin/posts') {
+      return { path: path, page: 'admin', sub: 'posts', slug: null };
     }
     if (path === '/admin/new') {
       return { path: path, page: 'admin', sub: 'new', slug: null };
@@ -241,8 +280,8 @@
     var route = getRoute();
     var html = '';
 
-    // Admin routes are handled by the Admin module
-    if (route.page === 'admin') {
+    // Admin / Submit routes are handled by the Admin module
+    if (route.page === 'admin' || route.page === 'submit') {
       if (typeof Admin !== 'undefined') {
         html = Admin.render(route);
       } else {
@@ -270,18 +309,23 @@
       main.classList.remove('page-enter');
     }, 350);
 
-    // Update active nav link (hide active state for admin)
+    // Update active nav link
     updateActiveNav(route.page);
     updateLangUI();
+    refreshHeaderAuth();
 
     // Scroll to top on route change
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Attach event handlers
-    if (route.page === 'admin' && typeof Admin !== 'undefined') {
-      Admin.bindEvents(route);
-    } else {
-      attachPostCardListeners();
+    // Attach event handlers and trigger async loading
+    if (route.page === 'admin' || route.page === 'submit') {
+      if (typeof Admin !== 'undefined') {
+        Admin.bindEvents(route);
+      }
+    } else if (route.page === 'home') {
+      loadBlogListContent();
+    } else if (route.page === 'post') {
+      loadPostDetailContent(route.slug);
     }
   }
 
@@ -290,14 +334,22 @@
     for (var i = 0; i < links.length; i++) {
       links[i].classList.remove('active');
     }
-    if (page === 'admin') {
-      // No active nav item for admin pages
+    if (page === 'admin' || page === 'submit') {
       return;
     }
     var selector = page === 'about' ? 'a[href="#/about"]' : 'a[href="#/"]';
     var activeLink = document.querySelector(selector);
     if (activeLink) {
       activeLink.classList.add('active');
+    }
+  }
+
+  /** Refresh the header auth area (called on auth state change and route changes) */
+  function refreshHeaderAuth() {
+    var authArea = document.getElementById('authArea');
+    if (authArea && typeof Auth !== 'undefined') {
+      authArea.innerHTML = Auth.renderHeaderAuth();
+      Auth.bindHeaderEvents();
     }
   }
 
@@ -338,8 +390,24 @@
   window.addEventListener('hashchange', handleRoute);
 
   // ==========================================
+  // Auth State Listener
+  // ==========================================
+
+  if (typeof Auth !== 'undefined') {
+    Auth.onAuthStateChanged(function (user, role) {
+      refreshHeaderAuth();
+      // Re-render if on admin page (auth state changed)
+      var route = getRoute();
+      if (route.page === 'admin' || route.page === 'submit') {
+        handleRoute();
+      }
+    });
+  }
+
+  // ==========================================
   // Initial Render
   // ==========================================
 
   handleRoute();
+  refreshHeaderAuth();
 })();

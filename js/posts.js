@@ -201,12 +201,54 @@ posts.sort(function (a, b) {
 });
 
 /**
- * Get the effective posts list.
- * If Admin module is loaded, merges custom posts from localStorage.
+ * Get the effective posts list (async).
+ * Loads approved posts from Firestore, merges with bundled posts.
+ * Falls back to bundled posts only if Firestore is unavailable.
+ *
+ * @returns {Promise<Array>} Sorted array of post objects
  */
 function getPosts() {
-  if (typeof Admin !== 'undefined' && Admin.getPublicPosts) {
-    return Admin.getPublicPosts();
+  // Try Firestore first
+  if (typeof db !== 'undefined') {
+    return db.collection('posts')
+      .where('status', '==', 'approved')
+      .orderBy('createdAt', 'desc')
+      .get()
+      .then(function (snapshot) {
+        var firestorePosts = [];
+        snapshot.forEach(function (doc) {
+          var data = doc.data();
+          data._id = doc.id;
+          // Convert Firestore timestamps to date strings
+          if (data.createdAt && data.createdAt.toDate) {
+            data.date = data.createdAt.toDate().toISOString().split('T')[0];
+          }
+          firestorePosts.push(data);
+        });
+
+        // Merge: Firestore posts + bundled posts (deduplicate by slug)
+        var slugs = {};
+        for (var i = 0; i < firestorePosts.length; i++) {
+          slugs[firestorePosts[i].slug] = true;
+        }
+        var merged = firestorePosts.slice();
+        for (var j = 0; j < posts.length; j++) {
+          if (!slugs[posts[j].slug]) {
+            merged.push(posts[j]);
+          }
+        }
+        // Sort by date descending
+        merged.sort(function (a, b) {
+          return new Date(b.date) - new Date(a.date);
+        });
+        return merged;
+      })
+      .catch(function (err) {
+        console.warn('Firestore fetch failed, using bundled posts:', err.message);
+        return posts;
+      });
   }
-  return posts;
+
+  // Fallback: bundled posts only
+  return Promise.resolve(posts);
 }
