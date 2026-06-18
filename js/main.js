@@ -98,93 +98,76 @@
   // Page Renderers
   // ==========================================
 
-  function renderBlogList() {
+  function renderBlogList(random) {
     var html = '';
-
     html += '<h1 class="page-title">' + t('siteTitle') + '</h1>';
     html += '<p class="page-subtitle">' + t('blogSubtitle') + '</p>';
-
-    // Three-column layout
-    html += '<div class="dream-columns" id="dreamColumns">';
-    html += '<div class="dream-col" id="colSweet">';
-    html += '<h2 class="dream-col-title">' + (t('sweetDreams') || '🌙 美梦') + '</h2>';
-    html += '<div class="dream-col-list" id="listSweet"><p style="text-align:center;padding:20px;color:var(--text-tertiary);">' + (t('loading') || '...') + '</p></div>';
-    html += '</div>';
-    html += '<div class="dream-col" id="colNightmare">';
-    html += '<h2 class="dream-col-title">' + (t('nightmares') || '💀 噩梦') + '</h2>';
-    html += '<div class="dream-col-list" id="listNightmare"><p style="text-align:center;padding:20px;color:var(--text-tertiary);">' + (t('loading') || '...') + '</p></div>';
-    html += '</div>';
-    html += '<div class="dream-col" id="colWeird">';
-    html += '<h2 class="dream-col-title">' + (t('weirdDreams') || '👽 怪梦') + '</h2>';
-    html += '<div class="dream-col-list" id="listWeird"><p style="text-align:center;padding:20px;color:var(--text-tertiary);">' + (t('loading') || '...') + '</p></div>';
-    html += '</div>';
-    html += '</div>';
-
+    html += '<div id="blogListContent"><p style="text-align:center;padding:40px;color:var(--text-tertiary);">' + (t('loading') || '...') + '</p></div>';
     return html;
   }
 
-  function loadBlogListContent() {
+  function loadBlogListContent(random) {
     getPosts().then(function (allPosts) {
+      var list = document.getElementById('blogListContent');
+      if (!list) return;
+
+      var postsToShow = allPosts;
+      if (random && allPosts.length > 1) {
+        // Shuffle and take up to 6 random posts
+        postsToShow = shuffle(allPosts.slice()).slice(0, 6);
+      }
+
+      if (postsToShow.length === 0) {
+        list.innerHTML = '<div class="empty-state"><p>' + t('noPosts') + '</p></div>';
+      } else {
+        list.innerHTML = '<div class="post-list">' + renderPostCards(postsToShow) + '</div>';
+        attachPostCardListeners();
+      }
+    });
+  }
+
+  function renderDreamPage(dream) {
+    var titles = { sweet: t('sweetDreams'), nightmare: t('nightmares'), weird: t('weirdDreams') };
+    var html = '';
+    html += '<h1 class="page-title">' + (titles[dream] || dream) + '</h1>';
+    html += '<div id="dreamContent"><p style="text-align:center;padding:40px;color:var(--text-tertiary);">' + (t('loading') || '...') + '</p></div>';
+    return html;
+  }
+
+  function loadDreamContent(dream) {
+    getPosts().then(function (allPosts) {
+      var container = document.getElementById('dreamContent');
+      if (!container) return;
+
       var categories = {
         sweet: ['美梦', 'Sweet Dreams', 'SweetDreams', 'sweet'],
         nightmare: ['噩梦', 'Nightmares', 'Nightmare', 'nightmare'],
         weird: ['怪梦', 'Weird Dreams', 'WeirdDreams', 'weird'],
       };
 
-      var buckets = { sweet: [], nightmare: [], weird: [] };
-
+      var filtered = [];
       for (var i = 0; i < allPosts.length; i++) {
-        var post = allPosts[i];
-        var cat = localized(post.category);
-        var matched = false;
-        for (var key in categories) {
-          if (categories[key].indexOf(cat) !== -1) {
-            buckets[key].push(post);
-            matched = true;
-            break;
-          }
-        }
-        // Default: put in nightmare (middle column)
-        if (!matched) {
-          buckets['nightmare'].push(post);
+        var cat = localized(allPosts[i].category);
+        if (categories[dream] && categories[dream].indexOf(cat) !== -1) {
+          filtered.push(allPosts[i]);
         }
       }
 
-      var colKeys = ['sweet', 'nightmare', 'weird'];
-      var listIds = ['listSweet', 'listNightmare', 'listWeird'];
-
-      for (var k = 0; k < colKeys.length; k++) {
-        var list = document.getElementById(listIds[k]);
-        if (!list) continue;
-        var postsInCol = buckets[colKeys[k]];
-        if (postsInCol.length === 0) {
-          list.innerHTML = '<p style="text-align:center;padding:20px;color:var(--text-tertiary);">' + (t('noPosts') || '暂无') + '</p>';
-        } else {
-          list.innerHTML = renderPostCards(postsInCol);
-        }
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>' + t('noPosts') + '</p></div>';
+      } else {
+        container.innerHTML = '<div class="post-list">' + renderPostCards(filtered) + '</div>';
+        attachPostCardListeners();
       }
-
-      attachPostCardListeners();
     });
   }
 
-  function renderPostCards(postsList) {
-    var html = '';
-    for (var i = 0; i < postsList.length; i++) {
-      var post = postsList[i];
-      var title = localized(post.title);
-      var summary = localized(post.summary);
-      var date = formatDate(post.date);
-      var readingTime = estimateReadingTime(localized(post.content));
-      var slug = post.slug;
-
-      html += '<article class="post-card post-card-sm" data-slug="' + slug + '">';
-      html += '<time class="post-card-date">' + date + ' · ' + t('readingTime', { n: readingTime }) + '</time>';
-      html += '<h3 class="post-card-title">' + title + '</h3>';
-      html += '<p class="post-card-summary">' + summary + '</p>';
-      html += '</article>';
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
     }
-    return html;
+    return arr;
   }
 
   function renderBlogListOld() {
@@ -287,40 +270,46 @@
 
     // Submit post route
     if (path === '/submit') {
-      return { path: path, page: 'submit', sub: null, slug: null };
+      return { path: path, page: 'submit', sub: null, slug: null, dream: null };
     }
 
     // Admin routes
-    if (path === '/admin') {
-      return { path: path, page: 'admin', sub: 'review', slug: null };
-    }
-    if (path === '/admin/review') {
-      return { path: path, page: 'admin', sub: 'review', slug: null };
-    }
-    if (path === '/admin/users') {
-      return { path: path, page: 'admin', sub: 'users', slug: null };
-    }
-    if (path === '/admin/posts') {
-      return { path: path, page: 'admin', sub: 'posts', slug: null };
-    }
-    if (path === '/admin/new') {
-      return { path: path, page: 'admin', sub: 'new', slug: null };
-    }
-    var adminEditMatch = path.match(/^\/admin\/edit\/(.+)/);
-    if (adminEditMatch) {
-      return { path: path, page: 'admin', sub: 'edit', slug: adminEditMatch[1] };
+    if (path.indexOf('/admin') === 0) {
+      if (path === '/admin') return { path: path, page: 'admin', sub: 'review', slug: null, dream: null };
+      if (path === '/admin/review') return { path: path, page: 'admin', sub: 'review', slug: null, dream: null };
+      if (path === '/admin/users') return { path: path, page: 'admin', sub: 'users', slug: null, dream: null };
+      if (path === '/admin/posts') return { path: path, page: 'admin', sub: 'posts', slug: null, dream: null };
+      if (path === '/admin/new') return { path: path, page: 'admin', sub: 'new', slug: null, dream: null };
+      var adminEditMatch = path.match(/^\/admin\/edit\/(.+)/);
+      if (adminEditMatch) return { path: path, page: 'admin', sub: 'edit', slug: adminEditMatch[1], dream: null };
     }
 
-    return {
-      path: path,
-      page: path === '/about' ? 'about' : (path.indexOf('/post/') === 0 ? 'post' : 'home'),
-      slug: path.indexOf('/post/') === 0 ? path.replace('/post/', '') : null,
-    };
+    // Dream category pages
+    if (path === '/sweet') return { path: path, page: 'dream', sub: null, slug: null, dream: 'sweet' };
+    if (path === '/nightmare') return { path: path, page: 'dream', sub: null, slug: null, dream: 'nightmare' };
+    if (path === '/weird') return { path: path, page: 'dream', sub: null, slug: null, dream: 'weird' };
+
+    // About page
+    if (path === '/about') return { path: path, page: 'about', sub: null, slug: null, dream: null };
+
+    // Post detail
+    if (path.indexOf('/post/') === 0) {
+      return { path: path, page: 'post', sub: null, slug: path.replace('/post/', ''), dream: null };
+    }
+
+    // Home
+    return { path: path, page: 'home', sub: null, slug: null, dream: null };
   }
 
   function handleRoute() {
     var route = getRoute();
     var html = '';
+
+    // Set dream theme
+    main.removeAttribute('data-dream');
+    if (route.dream) {
+      main.setAttribute('data-dream', route.dream);
+    }
 
     // Admin / Submit routes are handled by the Admin module
     if (route.page === 'admin' || route.page === 'submit') {
@@ -332,7 +321,10 @@
     } else {
       switch (route.page) {
         case 'home':
-          html = renderBlogList();
+          html = renderBlogList(true);
+          break;
+        case 'dream':
+          html = renderDreamPage(route.dream);
           break;
         case 'post':
           html = renderPostDetail(route.slug);
@@ -351,12 +343,10 @@
       main.classList.remove('page-enter');
     }, 350);
 
-    // Update active nav link
-    updateActiveNav(route.page);
+    updateActiveNav(route);
     updateLangUI();
     refreshHeaderAuth();
 
-    // Scroll to top on route change
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     // Attach event handlers and trigger async loading
@@ -365,21 +355,25 @@
         Admin.bindEvents(route);
       }
     } else if (route.page === 'home') {
-      loadBlogListContent();
+      loadBlogListContent(true);
+    } else if (route.page === 'dream') {
+      loadDreamContent(route.dream);
     } else if (route.page === 'post') {
       loadPostDetailContent(route.slug);
     }
   }
 
-  function updateActiveNav(page) {
+  function updateActiveNav(route) {
     var links = document.querySelectorAll('.nav-link');
     for (var i = 0; i < links.length; i++) {
       links[i].classList.remove('active');
     }
-    if (page === 'admin' || page === 'submit') {
-      return;
+    if (route.page === 'submit') return;
+
+    var selector = 'a[href="#/"]';
+    if (route.page === 'dream' && route.dream) {
+      selector = 'a[href="#/' + route.dream + '"]';
     }
-    var selector = page === 'about' ? 'a[href="#/about"]' : 'a[href="#/"]';
     var activeLink = document.querySelector(selector);
     if (activeLink) {
       activeLink.classList.add('active');

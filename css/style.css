@@ -1597,3 +1597,81 @@ img {
     gap: 16px;
   }
 }
+
+/* ========================================
+   Dream Category Color Themes
+   ======================================== */
+
+/* Sweet Dreams — Candle flame yellow */
+[data-dream="sweet"] {
+  --bg: #1a1205;
+  --bg-secondary: #241a0a;
+  --bg-tertiary: #2e2210;
+  --text: #fef3c7;
+  --text-secondary: #d4a853;
+  --text-tertiary: #a67c2e;
+  --accent: #f59e0b;
+  --accent-hover: #fbbf24;
+  --accent-light: #3d2e0a;
+  --border: #4a3515;
+  --card-bg: #241a0a;
+  --card-shadow: 0 1px 3px rgba(245, 158, 11, 0.15);
+  --card-shadow-hover: 0 10px 25px rgba(245, 158, 11, 0.25);
+  --header-bg: rgba(26, 18, 5, 0.9);
+  --tag-bg: #3d2e0a;
+  --tag-text: #f59e0b;
+  --code-bg: #2e2210;
+  --blockquote-border: #f59e0b;
+  --blockquote-bg: #241a0a;
+}
+
+/* Nightmares — Cat eye green */
+[data-dream="nightmare"] {
+  --bg: #050f05;
+  --bg-secondary: #0a1a0a;
+  --bg-tertiary: #0f240f;
+  --text: #d1fae5;
+  --text-secondary: #6ee7b7;
+  --text-tertiary: #2d8a4e;
+  --accent: #22c522;
+  --accent-hover: #4ade4a;
+  --accent-light: #0a2e0a;
+  --border: #1a4a1a;
+  --card-bg: #0a1a0a;
+  --card-shadow: 0 1px 3px rgba(34, 197, 34, 0.15);
+  --card-shadow-hover: 0 10px 25px rgba(34, 197, 34, 0.25);
+  --header-bg: rgba(5, 15, 5, 0.9);
+  --tag-bg: #0f240f;
+  --tag-text: #22c522;
+  --code-bg: #0f240f;
+  --blockquote-border: #22c522;
+  --blockquote-bg: #0a1a0a;
+}
+
+/* Weird Dreams — Ethereal white/purple */
+[data-dream="weird"] {
+  --bg: #0f0f1a;
+  --bg-secondary: #1a1a2e;
+  --bg-tertiary: #2a2a40;
+  --text: #f0e6ff;
+  --text-secondary: #c4b5fd;
+  --text-tertiary: #8b7fc4;
+  --accent: #a78bfa;
+  --accent-hover: #c4b5fd;
+  --accent-light: #2a2040;
+  --border: #3a2a5a;
+  --card-bg: #1a1a2e;
+  --card-shadow: 0 1px 3px rgba(167, 139, 250, 0.15);
+  --card-shadow-hover: 0 10px 25px rgba(167, 139, 250, 0.25);
+  --header-bg: rgba(15, 15, 26, 0.9);
+  --tag-bg: #2a2040;
+  --tag-text: #a78bfa;
+  --code-bg: #2a2040;
+  --blockquote-border: #a78bfa;
+  --blockquote-bg: #1a1a2e;
+}
+
+/* Nav link accent colors */
+.nav-sweet:hover, .nav-sweet.active { color: #f59e0b !important; background: rgba(245,158,11,0.15) !important; }
+.nav-nightmare:hover, .nav-nightmare.active { color: #22c522 !important; background: rgba(34,197,34,0.15) !important; }
+.nav-weird:hover, .nav-weird.active { color: #a78bfa !important; background: rgba(167,139,250,0.15) !important; }
