@@ -1,9 +1,9 @@
 /**
- * Auth Module
- * Handles Firebase Authentication: register, login, logout, role checking.
+ * Auth Module (CloudBase)
+ * Handles authentication: register, login, logout, role checking.
  * Manages header auth UI and login/register modal.
  *
- * Dependencies: firebase-config.js (global `auth`, `db`), i18n.js (global `t()`)
+ * Dependencies: cloudbase-config.js (global `app`, `auth`, `db`), i18n.js (global `t()`)
  */
 
 var Auth = (function () {
@@ -13,10 +13,9 @@ var Auth = (function () {
   // State
   // ==========================================
 
-  var currentUser = null;     // Firebase user object
+  var currentUser = null;     // CloudBase user object
   var userRole = null;        // 'user' | 'admin' | null
   var listeners = [];         // callbacks called on auth state change
-  var authModalVisible = false;
 
   // ==========================================
   // Core Auth Functions
@@ -38,11 +37,15 @@ var Auth = (function () {
     return userRole;
   }
 
-  /** Fetch user role from Firestore */
+  /** Fetch user role from CloudBase database */
   function fetchUserRole(uid) {
-    return db.collection('users').doc(uid).get().then(function (doc) {
-      if (doc.exists) {
-        userRole = doc.data().role || 'user';
+    if (!uid) {
+      userRole = null;
+      return Promise.resolve(null);
+    }
+    return db.collection('users').where({ _openid: uid }).get().then(function (res) {
+      if (res.data && res.data.length > 0) {
+        userRole = res.data[0].role || 'user';
       } else {
         userRole = 'user';
       }
@@ -55,31 +58,39 @@ var Auth = (function () {
 
   /** Register a new user with email + password */
   function register(email, password, displayName) {
-    return auth.createUserWithEmailAndPassword(email, password).then(function (cred) {
-      // Create user document in Firestore
-      return db.collection('users').doc(cred.user.uid).set({
+    return auth.signUp({
+      email: email,
+      password: password,
+      name: displayName || email.split('@')[0],
+    }).then(function () {
+      // Re-login to get the full user object
+      return auth.signIn({ username: email, password: password });
+    }).then(function () {
+      // Create user document in database
+      var uid = auth.currentUser ? auth.currentUser.uid : null;
+      return db.collection('users').add({
         email: email,
         displayName: displayName || email.split('@')[0],
         role: 'user',
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      }).then(function () {
-        return cred.user;
+        createdAt: db.serverDate(),
       });
     });
   }
 
   /** Login with email + password */
   function login(email, password) {
-    return auth.signInWithEmailAndPassword(email, password);
+    return auth.signIn({ username: email, password: password });
   }
 
   /** Logout */
   function logout() {
-    return auth.signOut();
+    return auth.signOut().then(function () {
+      localStorage.removeItem('cloudbase_session');
+    });
   }
 
   // ==========================================
-  // Auth State Listener
+  // Auth State Listener (manual)
   // ==========================================
 
   function onAuthStateChanged(callback) {
@@ -92,18 +103,27 @@ var Auth = (function () {
     }
   }
 
-  // Firebase auth state listener
-  auth.onAuthStateChanged(function (user) {
-    currentUser = user;
-    if (user) {
-      fetchUserRole(user.uid).then(function () {
+  /** Check current auth state and notify listeners */
+  function refreshAuthState() {
+    return auth.getCurrentUser().then(function (user) {
+      currentUser = user;
+      if (user && user.uid) {
+        return fetchUserRole(user.uid).then(function () {
+          notifyListeners();
+        });
+      } else {
+        userRole = null;
         notifyListeners();
-      });
-    } else {
+      }
+    }).catch(function () {
+      currentUser = null;
       userRole = null;
       notifyListeners();
-    }
-  });
+    });
+  }
+
+  // Initialize on load
+  refreshAuthState();
 
   // ==========================================
   // Header Auth Area Rendering
@@ -112,7 +132,7 @@ var Auth = (function () {
   function renderHeaderAuth() {
     var html = '';
     if (isLoggedIn()) {
-      var name = currentUser.displayName || currentUser.email || '';
+      var name = (currentUser.name) || (currentUser.email) || '';
       var roleLabel = isAdmin() ? ' [' + (t('adminRole') || 'Admin') + ']' : '';
       html += '<span class="header-user-name">' + escHtml(name) + roleLabel + '</span>';
       if (isAdmin()) {
@@ -133,18 +153,16 @@ var Auth = (function () {
     var btnLogout = document.getElementById('btnLogout');
 
     if (btnLogin) {
-      btnLogin.addEventListener('click', function () {
-        showModal('login');
-      });
+      btnLogin.addEventListener('click', function () { showModal('login'); });
     }
     if (btnRegister) {
-      btnRegister.addEventListener('click', function () {
-        showModal('register');
-      });
+      btnRegister.addEventListener('click', function () { showModal('register'); });
     }
     if (btnLogout) {
       btnLogout.addEventListener('click', function () {
-        logout();
+        logout().then(function () {
+          refreshAuthState();
+        });
       });
     }
   }
@@ -154,7 +172,6 @@ var Auth = (function () {
   // ==========================================
 
   function showModal(tab) {
-    authModalVisible = true;
     var modal = document.getElementById('authModal');
     if (!modal) return;
     modal.innerHTML = renderModal(tab);
@@ -163,7 +180,6 @@ var Auth = (function () {
   }
 
   function hideModal() {
-    authModalVisible = false;
     var modal = document.getElementById('authModal');
     if (!modal) return;
     modal.classList.remove('modal-visible');
@@ -183,36 +199,25 @@ var Auth = (function () {
 
     if (isLogin) {
       html += '<form id="authForm" class="auth-form">';
-      html += '<div class="auth-form-group">';
-      html += '<label class="auth-label">' + (t('email') || '邮箱') + '</label>';
-      html += '<input type="email" class="auth-input" id="authEmail" placeholder="email@example.com" required autofocus>';
-      html += '</div>';
-      html += '<div class="auth-form-group">';
-      html += '<label class="auth-label">' + (t('password') || '密码') + '</label>';
-      html += '<input type="password" class="auth-input" id="authPassword" placeholder="········" required>';
-      html += '</div>';
+      html += '<div class="auth-form-group"><label class="auth-label">' + (t('email') || '邮箱') + '</label>';
+      html += '<input type="email" class="auth-input" id="authEmail" placeholder="email@example.com" required autofocus></div>';
+      html += '<div class="auth-form-group"><label class="auth-label">' + (t('password') || '密码') + '</label>';
+      html += '<input type="password" class="auth-input" id="authPassword" placeholder="········" required></div>';
       html += '<p class="auth-error" id="authError" style="display:none;"></p>';
       html += '<button type="submit" class="auth-submit">' + (t('loginBtn') || '登录') + '</button>';
       html += '</form>';
     } else {
       html += '<form id="authForm" class="auth-form">';
-      html += '<div class="auth-form-group">';
-      html += '<label class="auth-label">' + (t('displayName') || '显示名称') + '</label>';
-      html += '<input type="text" class="auth-input" id="authDisplayName" placeholder="' + (t('displayNamePlaceholder') || '你的昵称') + '" required>';
-      html += '</div>';
-      html += '<div class="auth-form-group">';
-      html += '<label class="auth-label">' + (t('email') || '邮箱') + '</label>';
-      html += '<input type="email" class="auth-input" id="authEmail" placeholder="email@example.com" required>';
-      html += '</div>';
-      html += '<div class="auth-form-group">';
-      html += '<label class="auth-label">' + (t('password') || '密码') + ' <span class="auth-label-hint">' + (t('passwordHint') || '至少6位') + '</span></label>';
-      html += '<input type="password" class="auth-input" id="authPassword" placeholder="········" required minlength="6">';
-      html += '</div>';
+      html += '<div class="auth-form-group"><label class="auth-label">' + (t('displayName') || '显示名称') + '</label>';
+      html += '<input type="text" class="auth-input" id="authDisplayName" placeholder="' + (t('displayNamePlaceholder') || '你的昵称') + '" required></div>';
+      html += '<div class="auth-form-group"><label class="auth-label">' + (t('email') || '邮箱') + '</label>';
+      html += '<input type="email" class="auth-input" id="authEmail" placeholder="email@example.com" required></div>';
+      html += '<div class="auth-form-group"><label class="auth-label">' + (t('password') || '密码') + ' <span class="auth-label-hint">' + (t('passwordHint') || '8-32位，含字母和数字') + '</span></label>';
+      html += '<input type="password" class="auth-input" id="authPassword" placeholder="········" required minlength="8"></div>';
       html += '<p class="auth-error" id="authError" style="display:none;"></p>';
       html += '<button type="submit" class="auth-submit">' + (t('registerBtn') || '注册') + '</button>';
       html += '</form>';
     }
-
     html += '</div>';
     return html;
   }
@@ -226,13 +231,10 @@ var Auth = (function () {
     if (overlay) overlay.addEventListener('click', hideModal);
     if (closeBtn) closeBtn.addEventListener('click', hideModal);
 
-    if (tabs) {
-      for (var i = 0; i < tabs.length; i++) {
-        tabs[i].addEventListener('click', function () {
-          var newTab = this.getAttribute('data-tab');
-          showModal(newTab);
-        });
-      }
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].addEventListener('click', function () {
+        showModal(this.getAttribute('data-tab'));
+      });
     }
 
     if (form) {
@@ -253,20 +255,22 @@ var Auth = (function () {
             showError(errorEl, t('validationRequired') || '请填写显示名称');
             return;
           }
-          if (password.length < 6) {
-            showError(errorEl, t('passwordHint') || '密码至少6位');
+          if (password.length < 8) {
+            showError(errorEl, t('passwordHint') || '密码至少8位');
             return;
           }
           register(email, password, displayName).then(function () {
             hideModal();
+            return refreshAuthState();
           }).catch(function (err) {
-            showError(errorEl, translateFirebaseError(err));
+            showError(errorEl, translateError(err));
           });
         } else {
           login(email, password).then(function () {
             hideModal();
+            return refreshAuthState();
           }).catch(function (err) {
-            showError(errorEl, translateFirebaseError(err));
+            showError(errorEl, translateError(err));
           });
         }
       });
@@ -279,20 +283,15 @@ var Auth = (function () {
     el.style.display = 'block';
   }
 
-  /** Translate common Firebase auth errors to user-friendly messages */
-  function translateFirebaseError(err) {
-    var code = err.code || '';
-    var map = {
-      'auth/email-already-in-use': t('authEmailInUse') || '该邮箱已被注册',
-      'auth/invalid-email': t('authInvalidEmail') || '邮箱格式不正确',
-      'auth/weak-password': t('authWeakPassword') || '密码强度不够，请至少使用6位密码',
-      'auth/user-not-found': t('authUserNotFound') || '该账号不存在',
-      'auth/wrong-password': t('authWrongPassword') || '密码错误',
-      'auth/invalid-credential': t('authInvalidCredential') || '邮箱或密码错误',
-      'auth/too-many-requests': t('authTooManyRequests') || '尝试次数过多，请稍后再试',
-      'auth/network-request-failed': t('authNetworkError') || '网络连接失败，请检查网络',
-    };
-    return map[code] || err.message || (t('authUnknownError') || '发生未知错误');
+  function translateError(err) {
+    var msg = (err && err.message) || '';
+    if (msg.indexOf('INVALID_EMAIL') !== -1) return t('authInvalidEmail') || '邮箱格式不正确';
+    if (msg.indexOf('EMAIL_ALREADY_EXISTS') !== -1) return t('authEmailInUse') || '该邮箱已被注册';
+    if (msg.indexOf('INVALID_PASSWORD') !== -1 || msg.indexOf('PASSWORD') !== -1) return t('authWrongPassword') || '密码错误';
+    if (msg.indexOf('USER_NOT_FOUND') !== -1) return t('authUserNotFound') || '该账号不存在';
+    if (msg.indexOf('RATE_LIMIT') !== -1) return t('authTooManyRequests') || '尝试次数过多，请稍后再试';
+    if (msg.indexOf('NETWORK') !== -1) return t('authNetworkError') || '网络连接失败';
+    return msg || (t('authUnknownError') || '发生未知错误');
   }
 
   // ==========================================
@@ -303,6 +302,7 @@ var Auth = (function () {
     if (!isLoggedIn()) {
       return Promise.reject(new Error('Not logged in'));
     }
+    var user = getCurrentUser();
     var doc = {
       title: postData.title || { zh: '', en: '' },
       summary: postData.summary || { zh: '', en: '' },
@@ -310,12 +310,12 @@ var Auth = (function () {
       category: postData.category || { zh: '', en: '' },
       tags: postData.tags || [],
       slug: postData.slug || generateSlugFromTitle(postData.title),
-      authorId: currentUser.uid,
-      authorName: currentUser.displayName || currentUser.email,
+      authorId: user.uid,
+      authorName: user.name || user.email,
       status: 'pending',
       reviewComment: '',
       reviewedBy: '',
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      createdAt: db.serverDate(),
       reviewedAt: null,
     };
     return db.collection('posts').add(doc);
@@ -323,11 +323,8 @@ var Auth = (function () {
 
   function generateSlugFromTitle(title) {
     var str = (title && (title.zh || title.en || '')) || '';
-    return str
-      .toLowerCase()
-      .replace(/[^a-z0-9一-鿿]+/g, '-')
-      .replace(/[^\x00-\x7F]/g, '')
-      .replace(/-+/g, '-')
+    return str.toLowerCase().replace(/[^a-z0-9一-鿿]+/g, '-')
+      .replace(/[^\x00-\x7F]/g, '').replace(/-+/g, '-')
       .replace(/^-|-$/g, '') || 'post-' + Date.now();
   }
 
@@ -351,6 +348,7 @@ var Auth = (function () {
     register: register,
     login: login,
     logout: logout,
+    refreshAuthState: refreshAuthState,
     onAuthStateChanged: onAuthStateChanged,
     renderHeaderAuth: renderHeaderAuth,
     bindHeaderEvents: bindHeaderEvents,

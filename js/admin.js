@@ -1,9 +1,9 @@
 /**
- * Admin Module v2 (Firebase)
+ * Admin Module v2 (CloudBase)
  * Handles admin authentication, post review, user management, and post editing.
- * All data stored in Firestore.
+ * All data stored in CloudBase Database.
  *
- * Dependencies: firebase-config.js (db, auth), i18n.js (t, localized), auth.js (Auth)
+ * Dependencies: cloudbase-config.js (app, auth, db), i18n.js (t, localized), auth.js (Auth)
  */
 
 var Admin = (function () {
@@ -38,12 +38,13 @@ var Admin = (function () {
   }
 
   function docToPost(doc) {
-    var data = doc.data();
-    data._id = doc.id;
-    if (data.createdAt && data.createdAt.toDate) {
-      data.date = data.createdAt.toDate().toISOString().split('T')[0];
+    doc._id = doc._id || '';
+    if (doc.createdAt instanceof Date) {
+      doc.date = doc.createdAt.toISOString().split('T')[0];
+    } else if (doc.createdAt && typeof doc.createdAt === 'number') {
+      doc.date = new Date(doc.createdAt).toISOString().split('T')[0];
     }
-    return data;
+    return doc;
   }
 
   // ==========================================
@@ -52,12 +53,15 @@ var Admin = (function () {
 
   function getPendingPosts() {
     return postsRef()
-      .where('status', '==', 'pending')
+      .where({ status: 'pending' })
       .orderBy('createdAt', 'desc')
       .get()
-      .then(function (snap) {
+      .then(function (res) {
         var result = [];
-        snap.forEach(function (doc) { result.push(docToPost(doc)); });
+        var data = res.data || [];
+        for (var i = 0; i < data.length; i++) {
+          result.push(docToPost(data[i]));
+        }
         return result;
       });
   }
@@ -66,9 +70,12 @@ var Admin = (function () {
     return postsRef()
       .orderBy('createdAt', 'desc')
       .get()
-      .then(function (snap) {
+      .then(function (res) {
         var result = [];
-        snap.forEach(function (doc) { result.push(docToPost(doc)); });
+        var data = res.data || [];
+        for (var i = 0; i < data.length; i++) {
+          result.push(docToPost(data[i]));
+        }
         return result;
       });
   }
@@ -78,7 +85,7 @@ var Admin = (function () {
       status: 'approved',
       reviewComment: comment || '',
       reviewedBy: Auth.getCurrentUser().uid,
-      reviewedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      reviewedAt: db.serverDate(),
     });
   }
 
@@ -87,7 +94,7 @@ var Admin = (function () {
       status: 'rejected',
       reviewComment: comment || '',
       reviewedBy: Auth.getCurrentUser().uid,
-      reviewedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      reviewedAt: db.serverDate(),
     });
   }
 
@@ -96,7 +103,7 @@ var Admin = (function () {
   }
 
   function deletePost(postId) {
-    return postsRef().doc(postId).delete();
+    return postsRef().doc(postId).remove();
   }
 
   // ==========================================
@@ -107,13 +114,14 @@ var Admin = (function () {
     return usersRef()
       .orderBy('createdAt', 'desc')
       .get()
-      .then(function (snap) {
+      .then(function (res) {
         var result = [];
-        snap.forEach(function (doc) {
-          var u = doc.data();
-          u._id = doc.id;
+        var data = res.data || [];
+        for (var i = 0; i < data.length; i++) {
+          var u = data[i];
+          u._id = u._id || '';
           result.push(u);
-        });
+        }
         return result;
       });
   }
@@ -639,7 +647,7 @@ var Admin = (function () {
         var uid = this.getAttribute('data-uid');
         if (confirm(t('confirmDeleteUser'))) {
           // Delete from Firestore (auth deletion requires admin SDK)
-          usersRef().doc(uid).delete().then(function () {
+          usersRef().doc(uid).remove().then(function () {
             alert(t('adminPostDeleted'));
             window.location.reload();
           }).catch(function () {
@@ -839,7 +847,7 @@ var Admin = (function () {
       doc.authorId = Auth.getCurrentUser().uid;
       doc.authorName = Auth.getCurrentUser().displayName || 'Admin';
       doc.status = 'approved';
-      doc.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      doc.createdAt = db.serverDate();
       doc.reviewComment = '';
       doc.reviewedBy = '';
       doc.reviewedAt = null;
@@ -894,16 +902,17 @@ var Admin = (function () {
   function bindEvents(route) {
     // Admin editor (async load post data)
     if (route.page === 'admin' && route.sub === 'edit' && route.slug) {
-      postsRef().doc(route.slug).get().then(function (doc) {
-        if (doc.exists) {
-          var post = docToPost(doc);
-          document.getElementById('main').innerHTML = renderEditor(post);
-          bindEditorEvents(post);
-        } else {
-          document.getElementById('main').innerHTML = renderDashboard('posts');
-          bindDashboardEvents();
-        }
-      }).catch(function () {
+      postsRef().doc(route.slug).get().then(function (res) {
+          var data = res.data || [];
+          if (data.length > 0) {
+            var post = docToPost(data[0]);
+            document.getElementById('main').innerHTML = renderEditor(post);
+            bindEditorEvents(post);
+          } else {
+            document.getElementById('main').innerHTML = renderDashboard('posts');
+            bindDashboardEvents();
+          }
+        }).catch(function () {
         window.location.hash = '#/admin/posts';
       });
       return;

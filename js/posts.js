@@ -202,49 +202,51 @@ posts.sort(function (a, b) {
 
 /**
  * Get the effective posts list (async).
- * Loads approved posts from Firestore, merges with bundled posts.
- * Falls back to bundled posts only if Firestore is unavailable.
+ * Loads approved posts from CloudBase, merges with bundled posts.
+ * Falls back to bundled posts if CloudBase is unavailable.
  *
  * @returns {Promise<Array>} Sorted array of post objects
  */
 function getPosts() {
-  // Try Firestore first
+  // Try CloudBase first
   if (typeof db !== 'undefined') {
     return db.collection('posts')
-      .where('status', '==', 'approved')
+      .where({ status: 'approved' })
       .orderBy('createdAt', 'desc')
       .get()
-      .then(function (snapshot) {
-        var firestorePosts = [];
-        snapshot.forEach(function (doc) {
-          var data = doc.data();
-          data._id = doc.id;
-          // Convert Firestore timestamps to date strings
-          if (data.createdAt && data.createdAt.toDate) {
-            data.date = data.createdAt.toDate().toISOString().split('T')[0];
+      .then(function (res) {
+        var cloudPosts = [];
+        var data = res.data || [];
+        for (var i = 0; i < data.length; i++) {
+          var doc = data[i];
+          doc._id = doc._id || '';
+          // Convert server date to ISO date string
+          if (doc.createdAt instanceof Date) {
+            doc.date = doc.createdAt.toISOString().split('T')[0];
+          } else if (doc.createdAt && typeof doc.createdAt === 'number') {
+            doc.date = new Date(doc.createdAt).toISOString().split('T')[0];
           }
-          firestorePosts.push(data);
-        });
+          cloudPosts.push(doc);
+        }
 
-        // Merge: Firestore posts + bundled posts (deduplicate by slug)
+        // Merge: CloudBase posts + bundled posts (deduplicate by slug)
         var slugs = {};
-        for (var i = 0; i < firestorePosts.length; i++) {
-          slugs[firestorePosts[i].slug] = true;
+        for (var j = 0; j < cloudPosts.length; j++) {
+          slugs[cloudPosts[j].slug] = true;
         }
-        var merged = firestorePosts.slice();
-        for (var j = 0; j < posts.length; j++) {
-          if (!slugs[posts[j].slug]) {
-            merged.push(posts[j]);
+        var merged = cloudPosts.slice();
+        for (var k = 0; k < posts.length; k++) {
+          if (!slugs[posts[k].slug]) {
+            merged.push(posts[k]);
           }
         }
-        // Sort by date descending
         merged.sort(function (a, b) {
           return new Date(b.date) - new Date(a.date);
         });
         return merged;
       })
       .catch(function (err) {
-        console.warn('Firestore fetch failed, using bundled posts:', err.message);
+        console.warn('CloudBase fetch failed, using bundled posts:', err.message);
         return posts;
       });
   }
