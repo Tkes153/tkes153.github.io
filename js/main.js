@@ -103,6 +103,47 @@
     html += '<h1 class="page-title">' + t('siteTitle') + '</h1>';
     html += '<p class="page-subtitle">' + t('blogSubtitle') + '</p>';
     html += '<div id="blogListContent"><p style="text-align:center;padding:40px;color:var(--text-tertiary);">' + (t('loading') || '...') + '</p></div>';
+    html += renderDreamKnowledge();
+    return html;
+  }
+
+  function renderDreamKnowledge() {
+    var html = '';
+    html += '<div class="knowledge-section">';
+    html += '<h2 class="knowledge-title">' + (t('dreamKnowledge') || '💤 梦境科学小知识') + '</h2>';
+    html += '<div class="knowledge-cards">';
+    html += '<div class="knowledge-card">';
+    html += '<div class="knowledge-icon">🔄</div>';
+    html += '<h4>' + (t('kSleepCycle') || '睡眠周期') + '</h4>';
+    html += '<p>' + (t('kSleepCycleDesc') || '每夜经历4-5个睡眠周期，每个约90分钟。NREM深睡修复身体，REM睡眠孕育梦境。') + '</p>';
+    html += '</div>';
+    html += '<div class="knowledge-card">';
+    html += '<div class="knowledge-icon">🧠</div>';
+    html += '<h4>' + (t('kREM') || 'REM 睡眠') + '</h4>';
+    html += '<p>' + (t('kREMDesc') || '快速眼动睡眠期间大脑高度活跃，身体肌肉却处于麻痹状态——这是大脑防止你把梦"演"出来的保护机制。') + '</p>';
+    html += '</div>';
+    html += '<div class="knowledge-card">';
+    html += '<div class="knowledge-icon">💾</div>';
+    html += '<h4>' + (t('kMemory') || '记忆巩固') + '</h4>';
+    html += '<p>' + (t('kMemoryDesc') || '睡眠中大脑会对白天的经历进行"整理归档"，将短期记忆转化为长期记忆。这就是为什么熬夜复习效果往往不如睡一觉。') + '</p>';
+    html += '</div>';
+    html += '<div class="knowledge-card">';
+    html += '<div class="knowledge-icon">📝</div>';
+    html += '<h4>' + (t('kRecord') || '梦的记录') + '</h4>';
+    html += '<p>' + (t('kRecordDesc') || '醒来后的5分钟内会遗忘50%的梦境。在床头放本子和笔，醒来立刻记下关键词、情绪和画面，不要等"想清楚了"再写。') + '</p>';
+    html += '</div>';
+    html += '<div class="knowledge-card">';
+    html += '<div class="knowledge-icon">🎭</div>';
+    html += '<h4>' + (t('kActivation') || '激活-合成模型') + '</h4>';
+    html += '<p>' + (t('kActivationDesc') || '梦境可能是大脑皮层对脑干随机信号的"叙事拼接"——大脑像一个即兴导演，用记忆碎片编织出一个自洽的故事。') + '</p>';
+    html += '</div>';
+    html += '<div class="knowledge-card">';
+    html += '<div class="knowledge-icon">🌅</div>';
+    html += '<h4>' + (t('kMorning') || '清晨多梦') + '</h4>';
+    html += '<p>' + (t('kMorningDesc') || '越接近清晨，REM睡眠时间越长。所以你常常在闹钟响前被最后一个长长的梦唤醒——那不是偶然。') + '</p>';
+    html += '</div>';
+    html += '</div>';
+    html += '</div>';
     return html;
   }
 

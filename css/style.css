@@ -1757,3 +1757,63 @@ img {
   border-color: #a78bfa;
   box-shadow: 0 0 25px rgba(167, 139, 250, 0.4);
 }
+
+/* ========================================
+   Dream Knowledge Section (Homepage)
+   ======================================== */
+
+.knowledge-section {
+  margin-top: 48px;
+}
+
+.knowledge-title {
+  text-align: center;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 24px;
+  color: var(--text-secondary);
+}
+
+.knowledge-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.knowledge-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  transition: all 0.3s ease;
+}
+
+.knowledge-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--card-shadow-hover);
+}
+
+.knowledge-icon {
+  font-size: 1.8rem;
+  margin-bottom: 8px;
+}
+
+.knowledge-card h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+.knowledge-card p {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .knowledge-cards {
+    grid-template-columns: 1fr;
+  }
+}
