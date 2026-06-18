@@ -94,23 +94,18 @@
     return d.toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', options);
   }
 
-  /** Get localized value from a bilingual field */
-  function localized(field) {
-    var lang = getLang();
-    return field[lang] || field['en'] || '';
-  }
-
   // ==========================================
   // Page Renderers
   // ==========================================
 
   function renderBlogList() {
     var html = '';
+    var allPosts = getPosts();
 
     html += '<h1 class="page-title">' + t('siteTitle') + '</h1>';
     html += '<p class="page-subtitle">' + t('blogSubtitle') + '</p>';
 
-    if (posts.length === 0) {
+    if (allPosts.length === 0) {
       html += '<div class="empty-state">';
       html += '<div class="empty-state-icon">📝</div>';
       html += '<div class="empty-state-title">' + t('noPosts') + '</div>';
@@ -118,8 +113,8 @@
       html += '</div>';
     } else {
       html += '<div class="post-list">';
-      for (var i = 0; i < posts.length; i++) {
-        var post = posts[i];
+      for (var i = 0; i < allPosts.length; i++) {
+        var post = allPosts[i];
         var title = localized(post.title);
         var summary = localized(post.summary);
         var date = formatDate(post.date);
@@ -146,10 +141,11 @@
   }
 
   function renderPostDetail(slug) {
+    var allPosts = getPosts();
     var post = null;
-    for (var i = 0; i < posts.length; i++) {
-      if (posts[i].slug === slug) {
-        post = posts[i];
+    for (var i = 0; i < allPosts.length; i++) {
+      if (allPosts[i].slug === slug) {
+        post = allPosts[i];
         break;
       }
     }
@@ -220,10 +216,20 @@
 
   function getRoute() {
     var hash = window.location.hash || '#/';
-    // Remove leading # and split
     var path = hash.replace(/^#/, '') || '/';
-    // Match: /, /post/slug, /about
-    var match = path.match(/^\/(post\/([^/]+)|about)?$/);
+
+    // Admin routes
+    if (path === '/admin') {
+      return { path: path, page: 'admin', sub: 'dashboard', slug: null };
+    }
+    if (path === '/admin/new') {
+      return { path: path, page: 'admin', sub: 'new', slug: null };
+    }
+    var adminEditMatch = path.match(/^\/admin\/edit\/(.+)/);
+    if (adminEditMatch) {
+      return { path: path, page: 'admin', sub: 'edit', slug: adminEditMatch[1] };
+    }
+
     return {
       path: path,
       page: path === '/about' ? 'about' : (path.indexOf('/post/') === 0 ? 'post' : 'home'),
@@ -235,18 +241,27 @@
     var route = getRoute();
     var html = '';
 
-    switch (route.page) {
-      case 'home':
-        html = renderBlogList();
-        break;
-      case 'post':
-        html = renderPostDetail(route.slug);
-        break;
-      case 'about':
-        html = renderAbout();
-        break;
-      default:
+    // Admin routes are handled by the Admin module
+    if (route.page === 'admin') {
+      if (typeof Admin !== 'undefined') {
+        html = Admin.render(route);
+      } else {
         html = renderNotFound();
+      }
+    } else {
+      switch (route.page) {
+        case 'home':
+          html = renderBlogList();
+          break;
+        case 'post':
+          html = renderPostDetail(route.slug);
+          break;
+        case 'about':
+          html = renderAbout();
+          break;
+        default:
+          html = renderNotFound();
+      }
     }
 
     main.innerHTML = html;
@@ -255,21 +270,29 @@
       main.classList.remove('page-enter');
     }, 350);
 
-    // Update active nav link
+    // Update active nav link (hide active state for admin)
     updateActiveNav(route.page);
     updateLangUI();
 
     // Scroll to top on route change
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Attach click handlers to post cards (for the home page)
-    attachPostCardListeners();
+    // Attach event handlers
+    if (route.page === 'admin' && typeof Admin !== 'undefined') {
+      Admin.bindEvents(route);
+    } else {
+      attachPostCardListeners();
+    }
   }
 
   function updateActiveNav(page) {
     var links = document.querySelectorAll('.nav-link');
     for (var i = 0; i < links.length; i++) {
       links[i].classList.remove('active');
+    }
+    if (page === 'admin') {
+      // No active nav item for admin pages
+      return;
     }
     var selector = page === 'about' ? 'a[href="#/about"]' : 'a[href="#/"]';
     var activeLink = document.querySelector(selector);
