@@ -105,7 +105,6 @@ function getPosts() {
   if (typeof db !== 'undefined') {
     return db.collection('posts')
       .where({ status: 'approved' })
-      .orderBy('createdAt', 'desc')
       .get()
       .then(function (res) {
         var cloudPosts = [];
@@ -120,6 +119,10 @@ function getPosts() {
           }
           cloudPosts.push(doc);
         }
+        // Sort in JS instead of CloudBase (avoids index requirement)
+        cloudPosts.sort(function (a, b) {
+          return new Date(b.date || 0) - new Date(a.date || 0);
+        });
 
         // Merge: CloudBase posts + bundled posts (deduplicate by slug)
         var slugs = {};
@@ -138,7 +141,7 @@ function getPosts() {
         return merged;
       })
       .catch(function (err) {
-        console.warn('CloudBase fetch failed, using bundled posts:', err.message);
+        console.warn('CloudBase fetch failed, using bundled posts:', err);
         return posts;
       });
   }

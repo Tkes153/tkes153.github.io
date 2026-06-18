@@ -54,7 +54,6 @@ var Admin = (function () {
   function getPendingPosts() {
     return postsRef()
       .where({ status: 'pending' })
-      .orderBy('createdAt', 'desc')
       .get()
       .then(function (res) {
         var result = [];
@@ -62,6 +61,10 @@ var Admin = (function () {
         for (var i = 0; i < data.length; i++) {
           result.push(docToPost(data[i]));
         }
+        // Sort in JS (avoids compound index requirement)
+        result.sort(function (a, b) {
+          return new Date(b.date || 0) - new Date(a.date || 0);
+        });
         return result;
       });
   }
