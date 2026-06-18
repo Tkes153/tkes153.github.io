@@ -9,7 +9,7 @@
  */
 
 var cloudbaseConfig = {
-  env: 'YOUR_ENV_ID',
+  env: 'nightmare-d3g0te9us2fa64796',
   region: 'ap-shanghai'
 };
 
