@@ -170,6 +170,25 @@
     return arr;
   }
 
+  function renderPostCards(postsList) {
+    var html = '';
+    for (var i = 0; i < postsList.length; i++) {
+      var post = postsList[i];
+      var title = localized(post.title);
+      var summary = localized(post.summary);
+      var date = formatDate(post.date);
+      var readingTime = estimateReadingTime(localized(post.content));
+      var slug = post.slug;
+
+      html += '<article class="post-card post-card-sm" data-slug="' + slug + '">';
+      html += '<time class="post-card-date">' + date + ' · ' + t('readingTime', { n: readingTime }) + '</time>';
+      html += '<h3 class="post-card-title">' + title + '</h3>';
+      html += '<p class="post-card-summary">' + summary + '</p>';
+      html += '</article>';
+    }
+    return html;
+  }
+
   function renderBlogListOld() {
     var html = '';
 
