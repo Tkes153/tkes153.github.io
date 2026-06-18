@@ -371,15 +371,14 @@ var Admin = (function () {
     html += '<input type="date" class="admin-input" name="date" value="' + p.date + '" required>';
     html += '</div>';
 
-    // Category
-    html += '<div class="admin-form-row admin-form-row-2">';
+    // Dream Type (replaces category)
     html += '<div class="admin-form-group">';
-    html += '<label class="admin-label">' + t('adminCategoryZh') + '</label>';
-    html += '<input type="text" class="admin-input" name="categoryZh" value="' + escAttr(p.category.zh) + '" placeholder="例如：技术">';
-    html += '</div>';
-    html += '<div class="admin-form-group">';
-    html += '<label class="admin-label">' + t('adminCategoryEn') + '</label>';
-    html += '<input type="text" class="admin-input" name="categoryEn" value="' + escAttr(p.category.en) + '" placeholder="e.g. Tech">';
+    html += '<label class="admin-label">' + (t('dreamType') || '梦境类型') + '</label>';
+    html += '<div class="dream-type-select">';
+    var dreamType = getDreamType(p.category);
+    html += '<label class="dream-type-opt' + (dreamType === 'sweet' ? ' selected' : '') + '"><input type="radio" name="dreamType" value="sweet"' + (dreamType === 'sweet' ? ' checked' : '') + '> 🌙 ' + (t('sweetDreamsShort') || '美梦') + '</label>';
+    html += '<label class="dream-type-opt' + (dreamType === 'nightmare' ? ' selected' : '') + '"><input type="radio" name="dreamType" value="nightmare"' + (dreamType === 'nightmare' ? ' checked' : '') + '> 💀 ' + (t('nightmaresShort') || '噩梦') + '</label>';
+    html += '<label class="dream-type-opt' + (dreamType === 'weird' ? ' selected' : '') + '"><input type="radio" name="dreamType" value="weird"' + (dreamType === 'weird' ? ' checked' : '') + '> 👽 ' + (t('weirdDreamsShort') || '怪梦') + '</label>';
     html += '</div>';
     html += '</div>';
 
@@ -466,15 +465,13 @@ var Admin = (function () {
 
     html += '<form id="submitPostForm" class="admin-editor-form">';
 
-    // Category
-    html += '<div class="admin-form-row admin-form-row-2">';
+    // Dream Type
     html += '<div class="admin-form-group">';
-    html += '<label class="admin-label">' + t('adminCategoryZh') + '</label>';
-    html += '<input type="text" class="admin-input" name="categoryZh" placeholder="例如：技术">';
-    html += '</div>';
-    html += '<div class="admin-form-group">';
-    html += '<label class="admin-label">' + t('adminCategoryEn') + '</label>';
-    html += '<input type="text" class="admin-input" name="categoryEn" placeholder="e.g. Tech">';
+    html += '<label class="admin-label">' + (t('dreamType') || '梦境类型') + '</label>';
+    html += '<div class="dream-type-select">';
+    html += '<label class="dream-type-opt selected"><input type="radio" name="dreamType" value="sweet" checked> 🌙 ' + (t('sweetDreamsShort') || '美梦') + '</label>';
+    html += '<label class="dream-type-opt"><input type="radio" name="dreamType" value="nightmare"> 💀 ' + (t('nightmaresShort') || '噩梦') + '</label>';
+    html += '<label class="dream-type-opt"><input type="radio" name="dreamType" value="weird"> 👽 ' + (t('weirdDreamsShort') || '怪梦') + '</label>';
     html += '</div>';
     html += '</div>';
 
@@ -807,11 +804,28 @@ var Admin = (function () {
       title: { zh: data.titleZh || '', en: data.titleEn || '' },
       summary: { zh: data.summaryZh || '', en: data.summaryEn || '' },
       content: { zh: data.contentZh || '', en: data.contentEn || '' },
-      category: { zh: data.categoryZh || '', en: data.categoryEn || '' },
+      category: dreamTypeToCategory(data.dreamType || 'nightmare'),
       tags: tags,
       slug: data.slug || '',
       date: data.date || new Date().toISOString().split('T')[0],
     };
+  }
+
+  function dreamTypeToCategory(type) {
+    var map = {
+      sweet: { zh: '美梦', en: 'Sweet Dreams' },
+      nightmare: { zh: '噩梦', en: 'Nightmares' },
+      weird: { zh: '怪梦', en: 'Weird Dreams' },
+    };
+    return map[type] || map['nightmare'];
+  }
+
+  function getDreamType(category) {
+    var cat = (category && (category.zh || category.en || '')) || '';
+    if (cat.indexOf('美梦') !== -1 || cat.indexOf('Sweet') !== -1) return 'sweet';
+    if (cat.indexOf('噩梦') !== -1 || cat.indexOf('Nightmare') !== -1) return 'nightmare';
+    if (cat.indexOf('怪梦') !== -1 || cat.indexOf('Weird') !== -1) return 'weird';
+    return 'nightmare';
   }
 
   function savePostFromForm(originalPost) {

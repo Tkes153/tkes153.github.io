@@ -1675,3 +1675,40 @@ img {
 .nav-sweet:hover, .nav-sweet.active { color: #f59e0b !important; background: rgba(245,158,11,0.15) !important; }
 .nav-nightmare:hover, .nav-nightmare.active { color: #22c522 !important; background: rgba(34,197,34,0.15) !important; }
 .nav-weird:hover, .nav-weird.active { color: #a78bfa !important; background: rgba(167,139,250,0.15) !important; }
+
+/* ========================================
+   Dream Type Selector (Radio Buttons)
+   ======================================== */
+
+.dream-type-select {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dream-type-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  background: var(--bg);
+}
+
+.dream-type-opt:hover {
+  border-color: var(--text-tertiary);
+}
+
+.dream-type-opt.selected {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+
+.dream-type-opt input[type="radio"] {
+  display: none;
+}
