@@ -56,15 +56,25 @@ var Auth = (function () {
     });
   }
 
-  /** Register a new user with email + password */
-  function register(email, password, displayName) {
-    // Use username+password method with email as username
-    return auth.signUp({
-      username: email,
-      password: password,
-      name: displayName || email.split('@')[0],
+  /** Step 1: Send verification code to email */
+  function sendVerification(email) {
+    return auth.getVerification({ email: email });
+  }
+
+  /** Step 2: Verify code and complete registration */
+  function verifyAndRegister(email, password, displayName, verificationInfo) {
+    return auth.verify({
+      verification_id: verificationInfo.verification_id,
+      verification_code: verificationInfo.verification_code,
+    }).then(function (tokenRes) {
+      return auth.signUp({
+        email: email,
+        verification_code: verificationInfo.verification_code,
+        verification_token: tokenRes.verification_token,
+        password: password,
+        name: displayName || email.split('@')[0],
+      });
     }).then(function () {
-      // signUp already logs user in; create Firestore user doc
       return auth.getCurrentUser().then(function (user) {
         if (!user) return;
         return db.collection('users').add({
@@ -75,11 +85,6 @@ var Auth = (function () {
         });
       });
     });
-  }
-
-  /** Login with email + password */
-  function login(email, password) {
-    return auth.signIn({ username: email, password: password });
   }
 
   /** Login with email + password */
@@ -212,6 +217,8 @@ var Auth = (function () {
       html += '<button type="submit" class="auth-submit">' + (t('loginBtn') || '登录') + '</button>';
       html += '</form>';
     } else {
+      // Register - Step 1: send verification code
+      html += '<div id="registerStep1">';
       html += '<form id="authForm" class="auth-form">';
       html += '<div class="auth-form-group"><label class="auth-label">' + (t('displayName') || '显示名称') + '</label>';
       html += '<input type="text" class="auth-input" id="authDisplayName" placeholder="' + (t('displayNamePlaceholder') || '你的昵称') + '" required></div>';
@@ -220,8 +227,19 @@ var Auth = (function () {
       html += '<div class="auth-form-group"><label class="auth-label">' + (t('password') || '密码') + ' <span class="auth-label-hint">' + (t('passwordHint') || '8-32位，含字母和数字') + '</span></label>';
       html += '<input type="password" class="auth-input" id="authPassword" placeholder="········" required minlength="8"></div>';
       html += '<p class="auth-error" id="authError" style="display:none;"></p>';
-      html += '<button type="submit" class="auth-submit">' + (t('registerBtn') || '注册') + '</button>';
-      html += '</form>';
+      html += '<button type="submit" class="auth-submit" id="btnSendCode">' + (t('sendCode') || '发送验证码') + '</button>';
+      html += '</form></div>';
+
+      // Register - Step 2: enter verification code (hidden initially)
+      html += '<div id="registerStep2" style="display:none;">';
+      html += '<form id="authForm2" class="auth-form">';
+      html += '<p style="color:var(--accent);text-align:center;margin-bottom:8px;">' + (t('codeSent') || '验证码已发送到你的邮箱') + '</p>';
+      html += '<div class="auth-form-group"><label class="auth-label">' + (t('verificationCode') || '验证码') + '</label>';
+      html += '<input type="text" class="auth-input" id="authVerificationCode" placeholder="123456" required autofocus></div>';
+      html += '<p class="auth-error" id="authError2" style="display:none;"></p>';
+      html += '<button type="submit" class="auth-submit">' + (t('registerBtn') || '完成注册') + '</button>';
+      html += '<button type="button" class="auth-submit" style="background:var(--bg);color:var(--text);border:1px solid var(--border);margin-top:8px;" id="btnBackStep1">← ' + (t('back') || '返回') + '</button>';
+      html += '</form></div>';
     }
     html += '</div>';
     return html;
@@ -264,10 +282,21 @@ var Auth = (function () {
             showError(errorEl, t('passwordHint') || '密码至少8位');
             return;
           }
-          register(email, password, displayName).then(function () {
-            hideModal();
-            return refreshAuthState();
+          // Step 1: Send verification code
+          var btn = document.getElementById('btnSendCode');
+          if (btn) { btn.textContent = (t('sending') || '发送中...'); btn.disabled = true; }
+          sendVerification(email).then(function (verification) {
+            // Store verification info and show step 2
+            document.getElementById('registerStep1').style.display = 'none';
+            var step2 = document.getElementById('registerStep2');
+            step2.style.display = 'block';
+            step2.setAttribute('data-verification-id', verification.verification_id);
+            // Pre-fill email/password for step 2
+            step2.setAttribute('data-email', email);
+            step2.setAttribute('data-password', password);
+            step2.setAttribute('data-name', displayName);
           }).catch(function (err) {
+            if (btn) { btn.textContent = (t('sendCode') || '发送验证码'); btn.disabled = false; }
             showError(errorEl, translateError(err));
           });
         } else {
@@ -278,6 +307,46 @@ var Auth = (function () {
             showError(errorEl, translateError(err));
           });
         }
+      });
+    }
+
+    // Step 2 form
+    var form2 = document.getElementById('authForm2');
+    if (form2) {
+      form2.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var step2 = document.getElementById('registerStep2');
+        var email = step2.getAttribute('data-email');
+        var password = step2.getAttribute('data-password');
+        var displayName = step2.getAttribute('data-name');
+        var verificationId = step2.getAttribute('data-verification-id');
+        var code = document.getElementById('authVerificationCode').value.trim();
+        var errorEl = document.getElementById('authError2');
+
+        if (!code) {
+          showError(errorEl, (t('enterCode') || '请输入验证码'));
+          return;
+        }
+
+        verifyAndRegister(email, password, displayName, {
+          verification_id: verificationId,
+          verification_code: code,
+        }).then(function () {
+          hideModal();
+          return refreshAuthState();
+        }).catch(function (err) {
+          showError(errorEl, translateError(err));
+        });
+      });
+    }
+
+    var backBtn = document.getElementById('btnBackStep1');
+    if (backBtn) {
+      backBtn.addEventListener('click', function () {
+        document.getElementById('registerStep2').style.display = 'none';
+        document.getElementById('registerStep1').style.display = 'block';
+        var btn = document.getElementById('btnSendCode');
+        if (btn) { btn.textContent = (t('sendCode') || '发送验证码'); btn.disabled = false; }
       });
     }
   }
@@ -350,7 +419,8 @@ var Auth = (function () {
     isAdmin: isAdmin,
     getCurrentUser: getCurrentUser,
     getUserRole: getUserRole,
-    register: register,
+    sendVerification: sendVerification,
+    verifyAndRegister: verifyAndRegister,
     login: login,
     logout: logout,
     refreshAuthState: refreshAuthState,
